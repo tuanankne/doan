@@ -30,65 +30,47 @@ function formatViolationType(value) {
   return value || "-";
 }
 
+function getStatusClassName(value) {
+  const status = (value || "").toLowerCase();
+  if (status.includes("done") || status.includes("xu ly") || status.includes("hoan")) {
+    return "status-badge status-done";
+  }
+  if (status.includes("cho") || status.includes("pending") || status.includes("wait")) {
+    return "status-badge status-pending";
+  }
+  return "status-badge status-other";
+}
+
 export default function ViolationsTable({ violations, loading, error, onRefresh }) {
   return (
-    <section style={{ marginTop: 20 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Danh sach vi pham</h2>
-        <button
-          type="button"
-          onClick={onRefresh}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #d1d5db",
-            background: "#ffffff",
-            cursor: "pointer",
-          }}
-        >
+    <section className="section-card" style={{ marginTop: 16 }}>
+      <div className="section-head">
+        <h3>Danh sách vi phạm</h3>
+        <button type="button" onClick={onRefresh} className="btn">
           Tai lai
         </button>
       </div>
 
-      {loading ? <div>Dang tai du lieu...</div> : null}
-      {error ? (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 10,
-            borderRadius: 8,
-            color: "#991b1b",
-            background: "#fee2e2",
-          }}
-        >
-          Loi: {error}
-        </div>
-      ) : null}
+      {loading ? <div className="hint">Dang tai du lieu...</div> : null}
+      {error ? <div className="alert alert-danger">Loi: {error}</div> : null}
 
-      <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 10 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+      <div className="table-wrap">
+        <table>
           <thead>
-            <tr style={{ background: "#f9fafb" }}>
-              <th style={thStyle}>Thoi gian</th>
-              <th style={thStyle}>Bien so</th>
-              <th style={thStyle}>Loai loi</th>
-              <th style={thStyle}>Trang thai</th>
-              <th style={thStyle}>Anh toan canh</th>
-              <th style={thStyle}>Anh bien so</th>
-              <th style={thStyle}>ID</th>
+            <tr>
+              <th>Thoi gian</th>
+              <th>Bien so</th>
+              <th>Loai loi</th>
+              <th>Trang thai</th>
+              <th>Anh toan canh</th>
+              <th>Anh bien so</th>
+              <th>ID</th>
             </tr>
           </thead>
           <tbody>
             {violations.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} style={{ padding: 16, textAlign: "center", color: "#6b7280" }}>
+                <td colSpan={7} className="empty-note">
                   Chua co du lieu vi pham.
                 </td>
               </tr>
@@ -96,37 +78,31 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
 
             {violations.map((item) => (
               <tr key={item.id || `${item.detected_at}-${item.detected_license_plate || "unknown"}`}>
-                <td style={tdStyle}>{formatDate(item.detected_at)}</td>
-                <td style={tdStyle}>{item.detected_license_plate || "Khong doc duoc"}</td>
-                <td style={tdStyle}>{formatViolationType(item.violation_type)}</td>
-                <td style={tdStyle}>{item.status || "Cho xu ly"}</td>
-                <td style={tdStyle}>
+                <td>{formatDate(item.detected_at)}</td>
+                <td>{item.detected_license_plate || "Khong doc duoc"}</td>
+                <td>{formatViolationType(item.violation_type)}</td>
+                <td>
+                  <span className={getStatusClassName(item.status)}>{item.status || "Cho xu ly"}</span>
+                </td>
+                <td>
                   {item.evidence_image_url ? (
                     <a href={item.evidence_image_url} target="_blank" rel="noreferrer">
-                      <img
-                        src={item.evidence_image_url}
-                        alt="Scene"
-                        style={{ width: 140, height: 80, objectFit: "cover", borderRadius: 6 }}
-                      />
+                      <img src={item.evidence_image_url} alt="Scene" className="thumb" />
                     </a>
                   ) : (
                     "-"
                   )}
                 </td>
-                <td style={tdStyle}>
+                <td>
                   {item.evidence_plate_url ? (
                     <a href={item.evidence_plate_url} target="_blank" rel="noreferrer">
-                      <img
-                        src={item.evidence_plate_url}
-                        alt="Plate"
-                        style={{ width: 140, height: 80, objectFit: "cover", borderRadius: 6 }}
-                      />
+                      <img src={item.evidence_plate_url} alt="Plate" className="thumb" />
                     </a>
                   ) : (
                     "-"
                   )}
                 </td>
-                <td style={tdStyle}>{item.id || "-"}</td>
+                <td>{item.id || "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -135,21 +111,3 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
     </section>
   );
 }
-
-const thStyle = {
-  textAlign: "left",
-  fontWeight: 600,
-  fontSize: 14,
-  color: "#111827",
-  padding: "10px 12px",
-  borderBottom: "1px solid #e5e7eb",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-  padding: "10px 12px",
-  borderBottom: "1px solid #f3f4f6",
-  verticalAlign: "middle",
-  fontSize: 14,
-  color: "#1f2937",
-};

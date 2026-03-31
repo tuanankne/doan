@@ -1,42 +1,35 @@
 import React from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import VideoConfig from "./components/VideoConfig";
 import DashboardPage from "./pages/DashboardPage";
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-        <nav
-          style={{
-            display: "flex",
-            gap: 10,
-            padding: "12px 20px",
-            borderBottom: "1px solid #e5e7eb",
-            background: "#ffffff",
-          }}
-        >
-          <Link to="/" style={linkStyle}>
-            Dashboard
-          </Link>
-          <Link to="/config" style={linkStyle}>
-            Cau hinh video
-          </Link>
-        </nav>
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="topbar-inner">
+            <div className="brand">
+              Traffic <span>AI Monitor</span>
+            </div>
+            <nav className="topbar-nav">
+              <NavLink to="/" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
+                Dashboard
+              </NavLink>
+              <NavLink to="/config" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
+                Cấu hình video
+              </NavLink>
+            </nav>
+          </div>
+        </header>
 
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/config" element={<VideoConfig />} />
-        </Routes>
+        <main className="page-shell">
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/config" element={<VideoConfig />} />
+          </Routes>
+        </main>
       </div>
     </BrowserRouter>
   );
 }
-
-const linkStyle = {
-  textDecoration: "none",
-  color: "#111827",
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-};

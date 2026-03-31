@@ -67,15 +67,15 @@ export default function DashboardPage() {
   }, [violations]);
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: 20, fontFamily: "Segoe UI, sans-serif" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 20 }}>
+    <div>
+      <header className="page-heading">
         <div>
-          <h1 style={{ marginBottom: 8 }}>Dashboard Phat nguoi</h1>
-          <p style={{ margin: 0, color: "#4b5563" }}>Giam sat va quan ly du lieu vi pham giao thong tu AI.</p>
+          <h1>Dashboard phat nguoi</h1>
+          <p className="subtitle">Giám sát và quản lý dữ liệu vi phạm giao thông theo thời gian thực.</p>
         </div>
       </header>
 
-      <section style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+      <section className="stats-grid">
         <StatCard title="Tong vi pham" value={stats.total} />
         <StatCard title="Vuot den do" value={stats.redLight} />
         <StatCard title="Di nguoc chieu" value={stats.wrongWay} />
@@ -93,16 +93,9 @@ export default function DashboardPage() {
 
 function StatCard({ title, value }) {
   return (
-    <div
-      style={{
-        padding: 14,
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        background: "#ffffff",
-      }}
-    >
-      <div style={{ fontSize: 13, color: "#6b7280" }}>{title}</div>
-      <div style={{ marginTop: 8, fontSize: 28, fontWeight: 700, color: "#111827" }}>{value}</div>
+    <div className="stat-card">
+      <div className="stat-label">{title}</div>
+      <div className="stat-value">{value}</div>
     </div>
   );
 }

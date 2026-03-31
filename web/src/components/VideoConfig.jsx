@@ -233,226 +233,203 @@ export default function VideoConfig({
   };
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: "0 auto", fontFamily: "Segoe UI, sans-serif" }}>
-      <h2 style={{ marginBottom: 8 }}>Video Config và Upload</h2>
-      <p style={{ marginTop: 0, color: "#4b5563" }}>
-        Chọn video, vẽ 2 vạch (vạch dừng và hướng đường), sau đó gửi về FastAPI để xử lý AI.
-      </p>
+    <div>
+      <header className="page-heading">
+        <div>
+          <h2>Cấu hình video và upload</h2>
+          <p className="subtitle">Chọn video, vẽ vạch dừng và vector hướng đường rồi gửi về backend AI để xử lý.</p>
+        </div>
+      </header>
 
-      <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-        <label>
-          <div style={{ marginBottom: 6, fontWeight: 600 }}>Video File</div>
-          <input type="file" accept="video/*" onChange={handleVideoChange} />
-        </label>
+      <section className="section-card">
+        <div className="video-tools">
+          <div className="field">
+            <span className="field-title">Video file</span>
+            <input type="file" accept="video/*" onChange={handleVideoChange} />
+          </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={() => setDrawMode(MODE_STOP_LINE)}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              background: drawMode === MODE_STOP_LINE ? "#f97316" : "#ffffff",
-              color: drawMode === MODE_STOP_LINE ? "#ffffff" : "#111827",
-            }}
-          >
-            Vẽ vạch dừng
-          </button>
-          <button
-            type="button"
-            onClick={() => setDrawMode(MODE_ROAD_DIRECTION)}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              background: drawMode === MODE_ROAD_DIRECTION ? "#0284c7" : "#ffffff",
-              color: drawMode === MODE_ROAD_DIRECTION ? "#ffffff" : "#111827",
-            }}
-          >
-            Vẽ vector hướng đường
-          </button>
-          <button
-            type="button"
-            onClick={clearCurrentMode}
-            style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#ffffff" }}
-          >
-            Xóa vạch hiện tại
-          </button>
-          <button
-            type="button"
-            onClick={clearAll}
-            style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#ffffff" }}
-          >
-            Xóa tất cả
-          </button>
+          <div className="actions-row">
+            <button
+              type="button"
+              onClick={() => setDrawMode(MODE_STOP_LINE)}
+              className={`btn btn-mode ${drawMode === MODE_STOP_LINE ? "active-stop" : ""}`}
+            >
+              Vẽ vạch dừng
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawMode(MODE_ROAD_DIRECTION)}
+              className={`btn btn-mode ${drawMode === MODE_ROAD_DIRECTION ? "active-direction" : ""}`}
+            >
+              Vẽ vector hướng đường
+            </button>
+            <button type="button" onClick={clearCurrentMode} className="btn">
+              Xóa vạch hiện tại
+            </button>
+            <button type="button" onClick={clearAll} className="btn btn-danger">
+              Xóa tất cả
+            </button>
+          </div>
+
+          <div className="mode-label">
+            Chế độ vẽ hiện tại: <strong>{drawMode === MODE_STOP_LINE ? "Vạch dừng" : "Vector hướng đường"}</strong>
+          </div>
         </div>
 
-        <div style={{ color: "#374151", fontSize: 14 }}>
-          Chế độ vẽ hiện tại: <strong>{drawMode === MODE_STOP_LINE ? "Vạch dừng" : "Vector hướng đường"}</strong>
-        </div>
-      </div>
-
-      {videoUrl ? (
-        <div style={{ position: "relative", width: stageSize.width, height: stageSize.height, border: "1px solid #d1d5db", borderRadius: 12, overflow: "hidden", background: "#111827" }}>
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            controls
-            style={{ width: stageSize.width, height: stageSize.height, objectFit: "contain", display: "block" }}
-            onLoadedMetadata={updateStageSizeFromVideo}
-          />
-
-          <Stage
-            width={stageSize.width}
-            height={stageSize.height}
-            onMouseDown={handleStagePointerDown}
-            onTouchStart={handleStagePointerDown}
-            style={{ position: "absolute", left: 0, top: 0 }}
-          >
-            <Layer>
-              {stopLinePoints.length === 2 ? (
-                <Line points={stopLineFlat} stroke="#f97316" strokeWidth={3} lineCap="round" />
-              ) : null}
-              {roadDirectionPoints.length === 2 ? (
-                <>
-                  <Line points={roadDirectionFlat} stroke="#0284c7" strokeWidth={3} lineCap="round" />
-                  <Arrow
-                    points={roadDirectionFlat}
-                    stroke="#0284c7"
-                    fill="#0284c7"
-                    strokeWidth={3}
-                    lineCap="round"
-                    pointerLength={10}
-                    pointerWidth={10}
-                  />
-                </>
-              ) : null}
-
-              <Text
-                text="Click trực tiếp lên video để đặt điểm"
-                x={12}
-                y={12}
-                fontSize={16}
-                fill="#ffffff"
-                stroke="#000000"
-                strokeWidth={0.35}
+        {videoUrl ? (
+          <div className="stage-scroll">
+            <div className="video-stage" style={{ width: stageSize.width, height: stageSize.height }}>
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                controls
+                style={{ width: stageSize.width, height: stageSize.height, objectFit: "contain", display: "block" }}
+                onLoadedMetadata={updateStageSizeFromVideo}
               />
-            </Layer>
-          </Stage>
+
+              <Stage
+                width={stageSize.width}
+                height={stageSize.height}
+                onMouseDown={handleStagePointerDown}
+                onTouchStart={handleStagePointerDown}
+                style={{ position: "absolute", left: 0, top: 0 }}
+              >
+                <Layer>
+                  {stopLinePoints.length === 2 ? (
+                    <Line points={stopLineFlat} stroke="#f08c00" strokeWidth={3} lineCap="round" />
+                  ) : null}
+                  {roadDirectionPoints.length === 2 ? (
+                    <>
+                      <Line points={roadDirectionFlat} stroke="#2f9e44" strokeWidth={3} lineCap="round" />
+                      <Arrow
+                        points={roadDirectionFlat}
+                        stroke="#2f9e44"
+                        fill="#2f9e44"
+                        strokeWidth={3}
+                        lineCap="round"
+                        pointerLength={10}
+                        pointerWidth={10}
+                      />
+                    </>
+                  ) : null}
+
+                  <Text
+                    text="Click trực tiếp lên video để đặt điểm"
+                    x={12}
+                    y={12}
+                    fontSize={16}
+                    fill="#ffffff"
+                    stroke="#000000"
+                    strokeWidth={0.35}
+                  />
+                </Layer>
+              </Stage>
+            </div>
+          </div>
+        ) : (
+          <div className="video-placeholder">Chưa có video. Hãy chọn file để bắt đầu cấu hình.</div>
+        )}
+
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="tracker">Tracker</label>
+            <select id="tracker" value={tracker} onChange={(e) => setTracker(e.target.value)}>
+              <option value="bytetrack.yaml">ByteTrack</option>
+              <option value="botsort.yaml">BoT-SORT</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="confidence">Confidence</label>
+            <input id="confidence" value={confidence} onChange={(e) => setConfidence(e.target.value)} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="iou">IoU</label>
+            <input id="iou" value={iou} onChange={(e) => setIou(e.target.value)} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="trajectory-window">Trajectory Window</label>
+            <input
+              id="trajectory-window"
+              value={trajectoryWindow}
+              onChange={(e) => setTrajectoryWindow(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="wrong-way-angle">Wrong-way Angle</label>
+            <input
+              id="wrong-way-angle"
+              value={wrongWayAngleThreshold}
+              onChange={(e) => setWrongWayAngleThreshold(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="min-displacement">Min Displacement (px)</label>
+            <input
+              id="min-displacement"
+              value={wrongWayMinDisplacementPx}
+              onChange={(e) => setWrongWayMinDisplacementPx(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="cooldown-seconds">Cooldown (seconds)</label>
+            <input
+              id="cooldown-seconds"
+              value={violationCooldownSeconds}
+              onChange={(e) => setViolationCooldownSeconds(e.target.value)}
+            />
+          </div>
         </div>
-      ) : (
-        <div style={{ padding: 24, border: "1px dashed #9ca3af", borderRadius: 12, color: "#4b5563" }}>
-          Chưa có video. Hãy chọn file để bắt đầu cấu hình.
+
+        <div className="field" style={{ marginTop: 12 }}>
+          <label htmlFor="red-intervals">Red Intervals JSON</label>
+          <textarea
+            id="red-intervals"
+            rows={4}
+            value={redIntervalsText}
+            onChange={(e) => setRedIntervalsText(e.target.value)}
+            placeholder="[[0,12.5],[35,50]]"
+          />
         </div>
-      )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 20 }}>
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Tracker</div>
-          <select value={tracker} onChange={(e) => setTracker(e.target.value)} style={{ width: "100%", padding: 8 }}>
-            <option value="bytetrack.yaml">ByteTrack</option>
-            <option value="botsort.yaml">BoT-SORT</option>
-          </select>
-        </label>
+        <div className="coord-preview">
+          <div>Stop line: {JSON.stringify(stopLinePoints.map(normalizePoint))}</div>
+          <div>Road direction: {JSON.stringify(roadDirectionPoints.map(normalizePoint))}</div>
+        </div>
 
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Confidence</div>
-          <input value={confidence} onChange={(e) => setConfidence(e.target.value)} style={{ width: "100%", padding: 8 }} />
-        </label>
-
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>IoU</div>
-          <input value={iou} onChange={(e) => setIou(e.target.value)} style={{ width: "100%", padding: 8 }} />
-        </label>
-
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Trajectory Window</div>
-          <input value={trajectoryWindow} onChange={(e) => setTrajectoryWindow(e.target.value)} style={{ width: "100%", padding: 8 }} />
-        </label>
-
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Wrong-way Angle</div>
-          <input
-            value={wrongWayAngleThreshold}
-            onChange={(e) => setWrongWayAngleThreshold(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
-          />
-        </label>
-
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Min Displacement (px)</div>
-          <input
-            value={wrongWayMinDisplacementPx}
-            onChange={(e) => setWrongWayMinDisplacementPx(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
-          />
-        </label>
-
-        <label>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Cooldown (seconds)</div>
-          <input
-            value={violationCooldownSeconds}
-            onChange={(e) => setViolationCooldownSeconds(e.target.value)}
-            style={{ width: "100%", padding: 8 }}
-          />
-        </label>
-      </div>
-
-      <label style={{ display: "block", marginTop: 12 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Red Intervals JSON</div>
-        <textarea
-          rows={4}
-          value={redIntervalsText}
-          onChange={(e) => setRedIntervalsText(e.target.value)}
-          style={{ width: "100%", padding: 10, fontFamily: "Consolas, monospace" }}
-          placeholder="[[0,12.5],[35,50]]"
-        />
-      </label>
-
-      <div style={{ marginTop: 12, display: "grid", gap: 6, color: "#111827" }}>
-        <div>Stop line: {JSON.stringify(stopLinePoints.map(normalizePoint))}</div>
-        <div>Road direction: {JSON.stringify(roadDirectionPoints.map(normalizePoint))}</div>
-      </div>
-
-      <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={submitToBackend}
-          disabled={!canSubmit}
-          style={{
-            padding: "10px 16px",
-            borderRadius: 8,
-            border: "none",
-            background: canSubmit ? "#111827" : "#9ca3af",
-            color: "#ffffff",
-            cursor: canSubmit ? "pointer" : "not-allowed",
-          }}
-        >
-          {isSubmitting ? "Đang xử lý..." : "Upload và chạy AI"}
-        </button>
+        <div className="submit-row">
+          <button
+            type="button"
+            onClick={submitToBackend}
+            disabled={!canSubmit}
+            className="btn btn-primary"
+          >
+            {isSubmitting ? "Dang xu ly..." : "Upload va chay AI"}
+          </button>
         {!canSubmit ? (
-          <span style={{ color: "#b91c1c", fontSize: 14 }}>
+          <span className="hint" style={{ color: "#a82525" }}>
             Cần có video + đủ 2 điểm cho mỗi vạch.
           </span>
         ) : null}
       </div>
 
-      {errorMessage ? (
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "#fee2e2", color: "#991b1b" }}>
-          {errorMessage}
-        </div>
-      ) : null}
+        {errorMessage ? <div className="alert alert-danger">{errorMessage}</div> : null}
 
-      {result ? (
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "#ecfeff", color: "#0e7490" }}>
-          <div style={{ fontWeight: 700 }}>Xử lý thành công</div>
-          <div>Tổng vi phạm: {result.total_violations}</div>
-          <pre style={{ overflowX: "auto", marginTop: 8, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(result.violations, null, 2)}
-          </pre>
-        </div>
-      ) : null}
+        {result ? (
+          <div className="alert alert-success">
+            <div style={{ fontWeight: 700 }}>Xử lý thành công</div>
+            <div>Tổng vi phạm: {result.total_violations}</div>
+            <pre style={{ overflowX: "auto", marginTop: 8, whiteSpace: "pre-wrap" }}>
+              {JSON.stringify(result.violations, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
