@@ -87,7 +87,7 @@ class VideoProcessor:
             raise FileNotFoundError(f"YOLO model not found: {model_path}")
 
         self.model = YOLO(str(model_file))
-        self.vehicle_model = YOLO(os.getenv("VEHICLE_TRACKER_MODEL", "yolo11n.pt"))
+        self.vehicle_model = YOLO(str(self._resolve_vehicle_model_path()))
         if supabase_client is not None:
             self.supabase = supabase_client
         else:
@@ -108,6 +108,29 @@ class VideoProcessor:
         self.vehicle_class_ids = self._infer_vehicle_class_ids(self.vehicle_model.names)
         self.plate_class_ids = self._infer_plate_class_ids()
         self.char_class_ids = self._infer_char_class_ids()
+
+    @staticmethod
+    def _resolve_vehicle_model_path() -> Path:
+        raw_model = os.getenv("VEHICLE_TRACKER_MODEL", "models/yolo11n.pt").strip()
+        model_candidate = Path(raw_model)
+
+        if model_candidate.is_absolute() and model_candidate.exists():
+            return model_candidate
+
+        server_root = Path(__file__).resolve().parents[2]
+        candidates = [
+            (server_root / model_candidate).resolve(),
+            (server_root.parent / model_candidate).resolve(),
+            (server_root / "models" / "yolo11n.pt").resolve(),
+        ]
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        raise FileNotFoundError(
+            "Vehicle tracker model not found. Set VEHICLE_TRACKER_MODEL to an existing file, for example models/yolo11n.pt"
+        )
 
     @staticmethod
     def _extract_rows(response: Any) -> List[Dict[str, Any]]:
@@ -708,7 +731,6 @@ class VideoProcessor:
                     continue
 
                 xyxy = boxes.xyxy.cpu().numpy()
-                classes = boxes.cls.cpu().numpy().astype(int)
                 if boxes.id is None:
                     continue
                 track_ids = boxes.id.cpu().numpy().astype(int)
@@ -716,9 +738,6 @@ class VideoProcessor:
                 plate_xyxy, plate_classes, plate_confs = self._detect_plate_boxes(frame, config.confidence, config.iou)
 
                 for i, track_id in enumerate(track_ids):
-                    if int(classes[i]) not in self.vehicle_class_ids:
-                        continue
-
                     bbox_arr = xyxy[i]
                     bbox: BBox = (
                         float(bbox_arr[0]),

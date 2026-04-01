@@ -1,5 +1,3 @@
-import React from "react";
-
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -22,10 +20,10 @@ function formatDate(value) {
 
 function formatViolationType(value) {
   if (value === "Vuot den do") {
-    return "Vuot den do";
+    return "Vượt đèn đỏ";
   }
   if (value === "Nguoc chieu") {
-    return "Nguoc chieu";
+    return "Ngược chiều";
   }
   return value || "-";
 }
@@ -41,29 +39,46 @@ function getStatusClassName(value) {
   return "status-badge status-other";
 }
 
+function formatStatus(value) {
+  const status = (value || "").toLowerCase();
+  if (!status) {
+    return "Chờ xử lý";
+  }
+  if (status.includes("done") || status.includes("hoan")) {
+    return "Đã xử lý";
+  }
+  if (status.includes("pending") || status.includes("wait") || status.includes("cho")) {
+    return "Chờ xử lý";
+  }
+  if (status.includes("xu ly")) {
+    return "Đang xử lý";
+  }
+  return value;
+}
+
 export default function ViolationsTable({ violations, loading, error, onRefresh }) {
   return (
     <section className="section-card" style={{ marginTop: 16 }}>
       <div className="section-head">
         <h3>Danh sách vi phạm</h3>
         <button type="button" onClick={onRefresh} className="btn">
-          Tai lai
+          Tải lại
         </button>
       </div>
 
-      {loading ? <div className="hint">Dang tai du lieu...</div> : null}
-      {error ? <div className="alert alert-danger">Loi: {error}</div> : null}
+      {loading ? <div className="hint">Đang tải dữ liệu...</div> : null}
+      {error ? <div className="alert alert-danger">Lỗi: {error}</div> : null}
 
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Thoi gian</th>
-              <th>Bien so</th>
-              <th>Loai loi</th>
-              <th>Trang thai</th>
-              <th>Anh toan canh</th>
-              <th>Anh bien so</th>
+              <th>Thời gian</th>
+              <th>Biển số</th>
+              <th>Loại lỗi</th>
+              <th>Trạng thái</th>
+              <th>Ảnh toàn cảnh</th>
+              <th>Ảnh biển số</th>
               <th>ID</th>
             </tr>
           </thead>
@@ -71,7 +86,7 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
             {violations.length === 0 && !loading ? (
               <tr>
                 <td colSpan={7} className="empty-note">
-                  Chua co du lieu vi pham.
+                  Chưa có dữ liệu vi phạm.
                 </td>
               </tr>
             ) : null}
@@ -79,15 +94,15 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
             {violations.map((item) => (
               <tr key={item.id || `${item.detected_at}-${item.detected_license_plate || "unknown"}`}>
                 <td>{formatDate(item.detected_at)}</td>
-                <td>{item.detected_license_plate || "Khong doc duoc"}</td>
+                <td>{item.detected_license_plate || "Không đọc được"}</td>
                 <td>{formatViolationType(item.violation_type)}</td>
                 <td>
-                  <span className={getStatusClassName(item.status)}>{item.status || "Cho xu ly"}</span>
+                  <span className={getStatusClassName(item.status)}>{formatStatus(item.status)}</span>
                 </td>
                 <td>
                   {item.evidence_image_url ? (
                     <a href={item.evidence_image_url} target="_blank" rel="noreferrer">
-                      <img src={item.evidence_image_url} alt="Scene" className="thumb" />
+                      <img src={item.evidence_image_url} alt="Toàn cảnh" className="thumb" />
                     </a>
                   ) : (
                     "-"
@@ -96,7 +111,7 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
                 <td>
                   {item.evidence_plate_url ? (
                     <a href={item.evidence_plate_url} target="_blank" rel="noreferrer">
-                      <img src={item.evidence_plate_url} alt="Plate" className="thumb" />
+                      <img src={item.evidence_plate_url} alt="Biển số" className="thumb" />
                     </a>
                   ) : (
                     "-"

@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../api/supabaseClient";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ViolationsTable from "../components/ViolationsTable";
+import { supabase } from "../../../shared/lib/supabaseClient";
 
 const VIOLATIONS_TABLE = import.meta.env.VITE_SUPABASE_VIOLATIONS_TABLE || "violations";
 
@@ -70,15 +70,15 @@ export default function DashboardPage() {
     <div>
       <header className="page-heading">
         <div>
-          <h1>Dashboard phat nguoi</h1>
+          <h1>Bảng điều khiển phạt nguội</h1>
           <p className="subtitle">Giám sát và quản lý dữ liệu vi phạm giao thông theo thời gian thực.</p>
         </div>
       </header>
 
       <section className="stats-grid">
-        <StatCard title="Tong vi pham" value={stats.total} />
-        <StatCard title="Vuot den do" value={stats.redLight} />
-        <StatCard title="Di nguoc chieu" value={stats.wrongWay} />
+        <StatCard title="Tổng vi phạm" value={stats.total} />
+        <StatCard title="Vượt đèn đỏ" value={stats.redLight} />
+        <StatCard title="Đi ngược chiều" value={stats.wrongWay} />
       </section>
 
       <ViolationsTable

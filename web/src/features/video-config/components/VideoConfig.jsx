@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Arrow, Layer, Line, Stage, Text } from "react-konva";
 
@@ -236,15 +236,15 @@ export default function VideoConfig({
     <div>
       <header className="page-heading">
         <div>
-          <h2>Cấu hình video và upload</h2>
-          <p className="subtitle">Chọn video, vẽ vạch dừng và vector hướng đường rồi gửi về backend AI để xử lý.</p>
+          <h2>Cấu hình video và tải lên</h2>
+          <p className="subtitle">Chọn video, vẽ vạch dừng và vector hướng đường rồi gửi về máy chủ AI để xử lý.</p>
         </div>
       </header>
 
       <section className="section-card">
         <div className="video-tools">
           <div className="field">
-            <span className="field-title">Video file</span>
+            <span className="field-title">Tệp video</span>
             <input type="file" accept="video/*" onChange={handleVideoChange} />
           </div>
 
@@ -314,7 +314,7 @@ export default function VideoConfig({
                   ) : null}
 
                   <Text
-                    text="Click trực tiếp lên video để đặt điểm"
+                    text="Nhấn trực tiếp lên video để đặt điểm"
                     x={12}
                     y={12}
                     fontSize={16}
@@ -332,7 +332,7 @@ export default function VideoConfig({
 
         <div className="form-grid">
           <div className="field">
-            <label htmlFor="tracker">Tracker</label>
+            <label htmlFor="tracker">Bộ bám vết</label>
             <select id="tracker" value={tracker} onChange={(e) => setTracker(e.target.value)}>
               <option value="bytetrack.yaml">ByteTrack</option>
               <option value="botsort.yaml">BoT-SORT</option>
@@ -340,7 +340,7 @@ export default function VideoConfig({
           </div>
 
           <div className="field">
-            <label htmlFor="confidence">Confidence</label>
+            <label htmlFor="confidence">Độ tin cậy</label>
             <input id="confidence" value={confidence} onChange={(e) => setConfidence(e.target.value)} />
           </div>
 
@@ -350,7 +350,7 @@ export default function VideoConfig({
           </div>
 
           <div className="field">
-            <label htmlFor="trajectory-window">Trajectory Window</label>
+            <label htmlFor="trajectory-window">Cửa sổ quỹ đạo</label>
             <input
               id="trajectory-window"
               value={trajectoryWindow}
@@ -359,7 +359,7 @@ export default function VideoConfig({
           </div>
 
           <div className="field">
-            <label htmlFor="wrong-way-angle">Wrong-way Angle</label>
+            <label htmlFor="wrong-way-angle">Góc ngược chiều</label>
             <input
               id="wrong-way-angle"
               value={wrongWayAngleThreshold}
@@ -368,7 +368,7 @@ export default function VideoConfig({
           </div>
 
           <div className="field">
-            <label htmlFor="min-displacement">Min Displacement (px)</label>
+            <label htmlFor="min-displacement">Độ dịch chuyển tối thiểu (px)</label>
             <input
               id="min-displacement"
               value={wrongWayMinDisplacementPx}
@@ -377,7 +377,7 @@ export default function VideoConfig({
           </div>
 
           <div className="field">
-            <label htmlFor="cooldown-seconds">Cooldown (seconds)</label>
+            <label htmlFor="cooldown-seconds">Thời gian chờ (giây)</label>
             <input
               id="cooldown-seconds"
               value={violationCooldownSeconds}
@@ -387,7 +387,7 @@ export default function VideoConfig({
         </div>
 
         <div className="field" style={{ marginTop: 12 }}>
-          <label htmlFor="red-intervals">Red Intervals JSON</label>
+          <label htmlFor="red-intervals">Khoảng đèn đỏ (JSON)</label>
           <textarea
             id="red-intervals"
             rows={4}
@@ -398,8 +398,8 @@ export default function VideoConfig({
         </div>
 
         <div className="coord-preview">
-          <div>Stop line: {JSON.stringify(stopLinePoints.map(normalizePoint))}</div>
-          <div>Road direction: {JSON.stringify(roadDirectionPoints.map(normalizePoint))}</div>
+          <div>Vạch dừng: {JSON.stringify(stopLinePoints.map(normalizePoint))}</div>
+          <div>Hướng đường: {JSON.stringify(roadDirectionPoints.map(normalizePoint))}</div>
         </div>
 
         <div className="submit-row">
@@ -409,7 +409,7 @@ export default function VideoConfig({
             disabled={!canSubmit}
             className="btn btn-primary"
           >
-            {isSubmitting ? "Dang xu ly..." : "Upload va chay AI"}
+            {isSubmitting ? "Đang xử lý..." : "Tải lên và chạy AI"}
           </button>
         {!canSubmit ? (
           <span className="hint" style={{ color: "#a82525" }}>

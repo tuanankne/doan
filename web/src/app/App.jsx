@@ -1,7 +1,6 @@
-import React from "react";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
-import VideoConfig from "./components/VideoConfig";
-import DashboardPage from "./pages/DashboardPage";
+import DashboardPage from "../features/dashboard/pages/DashboardPage";
+import VideoConfig from "../features/video-config/components/VideoConfig";
 
 export default function App() {
   return (
@@ -10,11 +9,11 @@ export default function App() {
         <header className="topbar">
           <div className="topbar-inner">
             <div className="brand">
-              Traffic <span>AI Monitor</span>
+              Giám sát <span>AI giao thông</span>
             </div>
             <nav className="topbar-nav">
               <NavLink to="/" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
-                Dashboard
+                Bảng điều khiển
               </NavLink>
               <NavLink to="/config" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
                 Cấu hình video
