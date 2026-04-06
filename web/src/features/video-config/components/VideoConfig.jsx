@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Arrow, Layer, Line, Stage, Text } from "react-konva";
 
@@ -23,6 +23,7 @@ function normalizePoint(point) {
 export default function VideoConfig({
   apiBaseUrl = "http://localhost:8000",
   processEndpoint = "/api/v1/process-video",
+  confirmEndpoint = "/api/v1/confirm-violations",
 }) {
   const videoRef = useRef(null);
   const [videoFile, setVideoFile] = useState(null);
@@ -43,8 +44,12 @@ export default function VideoConfig({
   const [redIntervalsText, setRedIntervalsText] = useState("[]");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
-  const [result, setResult] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [resultSummary, setResultSummary] = useState(null);
+  const [editableViolations, setEditableViolations] = useState([]);
 
   const stopLineFlat = useMemo(
     () => stopLinePoints.flatMap((p) => [p.x, p.y]),
@@ -60,6 +65,26 @@ export default function VideoConfig({
     stopLinePoints.length === 2 &&
     roadDirectionPoints.length === 2 &&
     !isSubmitting;
+
+  useEffect(() => {
+    if (!isSubmitting) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setProcessingProgress((prev) => {
+        if (prev >= 92) {
+          return prev;
+        }
+        const step = prev < 40 ? 5 : 2;
+        return Math.min(92, prev + step);
+      });
+    }, 350);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isSubmitting]);
 
   const updateStageSizeFromVideo = () => {
     const video = videoRef.current;
@@ -80,7 +105,9 @@ export default function VideoConfig({
 
   const handleVideoChange = (event) => {
     const file = event.target.files?.[0] || null;
-    setResult(null);
+    setResultSummary(null);
+    setEditableViolations([]);
+    setSuccessMessage("");
     setErrorMessage("");
 
     if (!file) {
@@ -146,7 +173,9 @@ export default function VideoConfig({
   const clearAll = () => {
     setStopLinePoints([]);
     setRoadDirectionPoints([]);
-    setResult(null);
+    setResultSummary(null);
+    setEditableViolations([]);
+    setSuccessMessage("");
     setErrorMessage("");
   };
 
@@ -175,8 +204,11 @@ export default function VideoConfig({
     }
 
     setIsSubmitting(true);
+    setProcessingProgress(5);
     setErrorMessage("");
-    setResult(null);
+    setSuccessMessage("");
+    setResultSummary(null);
+    setEditableViolations([]);
 
     try {
       const redIntervals = parseRedIntervals();
@@ -216,7 +248,15 @@ export default function VideoConfig({
         timeout: 30 * 60 * 1000,
       });
 
-      setResult(response.data);
+      const violations = response.data?.violations || [];
+      setEditableViolations(
+        violations.map((item) => ({
+          ...item,
+          detected_license_plate: item.detected_license_plate || "",
+        }))
+      );
+      setResultSummary({ total_violations: response.data?.total_violations || violations.length });
+      setProcessingProgress(100);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const message =
@@ -230,6 +270,66 @@ export default function VideoConfig({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handlePlateChange = (index, value) => {
+    setEditableViolations((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? {
+              ...item,
+              detected_license_plate: value,
+            }
+          : item
+      )
+    );
+  };
+
+  const confirmSaveToSupabase = async () => {
+    if (!editableViolations.length || isConfirming) {
+      return;
+    }
+
+    setIsConfirming(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const url = `${apiBaseUrl}${confirmEndpoint}`;
+      const response = await axios.post(
+        url,
+        {
+          violations: editableViolations,
+        },
+        { timeout: 5 * 60 * 1000 }
+      );
+
+      const savedCount = response.data?.saved_count ?? 0;
+      setSuccessMessage(`Đã xác nhận và lưu ${savedCount} vi phạm vào hệ thống.`);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          error.response?.data?.detail ||
+          error.message ||
+          "Không thể lưu dữ liệu xác nhận vào backend.";
+        setErrorMessage(message);
+      } else {
+        setErrorMessage(error.message || "Có lỗi không xác định khi lưu xác nhận.");
+      }
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const formatDate = (value) => {
+    if (!value) {
+      return "-";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+    return date.toLocaleString("vi-VN");
   };
 
   return (
@@ -411,22 +511,101 @@ export default function VideoConfig({
           >
             {isSubmitting ? "Đang xử lý..." : "Tải lên và chạy AI"}
           </button>
-        {!canSubmit ? (
-          <span className="hint" style={{ color: "#a82525" }}>
-            Cần có video + đủ 2 điểm cho mỗi vạch.
-          </span>
+          {!canSubmit ? (
+            <span className="hint" style={{ color: "#a82525" }}>
+              Cần có video + đủ 2 điểm cho mỗi vạch.
+            </span>
+          ) : null}
+        </div>
+
+        {isSubmitting ? (
+          <div className="processing-progress-wrap">
+            <div className="processing-progress-head">
+              <strong>Tiến độ xử lý video</strong>
+              <span>{processingProgress}%</span>
+            </div>
+            <div className="processing-progress-track">
+              <div
+                className="processing-progress-fill"
+                style={{ width: `${processingProgress}%` }}
+              />
+            </div>
+          </div>
         ) : null}
-      </div>
 
         {errorMessage ? <div className="alert alert-danger">{errorMessage}</div> : null}
 
-        {result ? (
+        {successMessage ? <div className="alert alert-success">{successMessage}</div> : null}
+
+        {resultSummary ? (
           <div className="alert alert-success">
             <div style={{ fontWeight: 700 }}>Xử lý thành công</div>
-            <div>Tổng vi phạm: {result.total_violations}</div>
-            <pre style={{ overflowX: "auto", marginTop: 8, whiteSpace: "pre-wrap" }}>
-              {JSON.stringify(result.violations, null, 2)}
-            </pre>
+            <div>Tổng vi phạm phát hiện: {resultSummary.total_violations}</div>
+            <div style={{ marginTop: 4 }}>
+              Hãy kiểm tra và chỉnh sửa biển số (nếu cần), sau đó nhấn xác nhận để lưu vào Supabase.
+            </div>
+          </div>
+        ) : null}
+
+        {editableViolations.length > 0 ? (
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Biển số (có thể sửa)</th>
+                  <th>Loại lỗi</th>
+                  <th>Ảnh toàn cảnh</th>
+                  <th>Ảnh biển số</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editableViolations.map((item, index) => (
+                  <tr key={`${item.detected_at || ""}-${index}`}>
+                    <td>{formatDate(item.detected_at)}</td>
+                    <td style={{ minWidth: 180 }}>
+                      <input
+                        value={item.detected_license_plate || ""}
+                        onChange={(e) => handlePlateChange(index, e.target.value)}
+                        placeholder="Nhập biển số"
+                      />
+                    </td>
+                    <td>{item.violation_type || "-"}</td>
+                    <td>
+                      {item.evidence_image_url ? (
+                        <a href={item.evidence_image_url} target="_blank" rel="noreferrer">
+                          <img src={item.evidence_image_url} alt="Toàn cảnh" className="thumb" />
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td>
+                      {item.evidence_plate_url ? (
+                        <a href={item.evidence_plate_url} target="_blank" rel="noreferrer">
+                          <img src={item.evidence_plate_url} alt="Biển số" className="thumb" />
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {editableViolations.length > 0 ? (
+          <div className="submit-row" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={confirmSaveToSupabase}
+              className="btn btn-primary"
+              disabled={isConfirming}
+            >
+              {isConfirming ? "Đang lưu xác nhận..." : "Xác nhận và lưu vào Supabase"}
+            </button>
           </div>
         ) : null}
       </section>

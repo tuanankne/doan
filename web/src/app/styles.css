@@ -423,6 +423,38 @@ textarea {
   gap: 10px;
 }
 
+.processing-progress-wrap {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f6fff8;
+  padding: 10px;
+}
+
+.processing-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #234636;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.processing-progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: #dcefe1;
+  overflow: hidden;
+}
+
+.processing-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--primary) 0%, #40c057 100%);
+  transition: width 0.35s ease;
+}
+
 .empty-note {
   text-align: center;
   color: #537261;

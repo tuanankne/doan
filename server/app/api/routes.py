@@ -13,7 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import Client, create_client
 
 from app.core.settings import load_settings
-from app.schemas.api_models import ProcessVideoResponse, UploadImageResponse
+from app.schemas.api_models import (
+    ConfirmViolationsRequest,
+    ConfirmViolationsResponse,
+    ProcessVideoResponse,
+    UploadImageResponse,
+)
 from app.services.supabase_service import SupabaseStorageService
 from app.services.video_processor import ProcessingConfig, VideoProcessor
 
@@ -124,6 +129,23 @@ def build_app() -> FastAPI:
             return UploadImageResponse(file_name=file_name, storage_url=public_url)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
+
+    @router.post("/confirm-violations", response_model=ConfirmViolationsResponse)
+    async def confirm_violations(payload: ConfirmViolationsRequest) -> ConfirmViolationsResponse:
+        if not payload.violations:
+            raise HTTPException(status_code=400, detail="Danh sách vi phạm xác nhận đang trống")
+
+        try:
+            processor = VideoProcessor(
+                model_path=settings.model_path,
+                storage_bucket=settings.storage_bucket,
+                violations_table=settings.violations_table,
+                supabase_client=supabase_client,
+            )
+            saved_count = processor.save_confirmed_violations(payload.violations)
+            return ConfirmViolationsResponse(saved_count=saved_count)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Lưu vi phạm thất bại: {exc}") from exc
 
     app.include_router(router)
     return app

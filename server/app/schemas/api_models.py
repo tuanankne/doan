@@ -13,3 +13,11 @@ class ProcessVideoResponse(BaseModel):
 class UploadImageResponse(BaseModel):
     file_name: str
     storage_url: str
+
+
+class ConfirmViolationsRequest(BaseModel):
+    violations: List[Dict[str, Any]]
+
+
+class ConfirmViolationsResponse(BaseModel):
+    saved_count: int

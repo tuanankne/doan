@@ -626,7 +626,7 @@ class VideoProcessor:
 
         return str(public_url_data)
 
-    def _save_violation(
+    def _prepare_violation_record(
         self,
         frame: np.ndarray,
         vehicle_bbox: BBox,
@@ -665,19 +665,47 @@ class VideoProcessor:
 
         plate_url = self._upload_jpeg(plate_img, plate_path)
 
-        vehicle_id = self._find_vehicle_id(plate_text)
-
         record = {
-            "vehicle_id": vehicle_id,
             "detected_license_plate": plate_text or "UNKNOWN",
             "violation_type": violation_type,
             "evidence_image_url": scene_url,
             "evidence_plate_url": plate_url,
             "detected_at": event_time.isoformat(),
+            "status": "pending_confirmation",
         }
-
-        self.supabase.table(self.violations_table).insert(record).execute()
         return record
+
+    def save_confirmed_violations(self, violations: Sequence[Dict[str, Any]]) -> int:
+        inserted = 0
+        for item in violations:
+            plate_text = self._sanitize_plate_text(str(item.get("detected_license_plate", "")))
+            violation_type = str(item.get("violation_type", "")).strip()
+            evidence_image_url = str(item.get("evidence_image_url", "")).strip()
+            evidence_plate_url = str(item.get("evidence_plate_url", "")).strip()
+            detected_at = str(item.get("detected_at", "")).strip()
+
+            if not violation_type or not evidence_image_url or not evidence_plate_url:
+                continue
+
+            if not detected_at:
+                detected_at = datetime.now(timezone.utc).isoformat()
+
+            vehicle_id = self._find_vehicle_id(plate_text)
+
+            record = {
+                "vehicle_id": vehicle_id,
+                "detected_license_plate": plate_text or "UNKNOWN",
+                "violation_type": violation_type,
+                "evidence_image_url": evidence_image_url,
+                "evidence_plate_url": evidence_plate_url,
+                "detected_at": detected_at,
+                "status": "pending",
+            }
+
+            self.supabase.table(self.violations_table).insert(record).execute()
+            inserted += 1
+
+        return inserted
 
     def process_video(self, video_path: str, config: ProcessingConfig) -> List[Dict[str, Any]]:
         if not os.path.exists(video_path):
@@ -780,7 +808,7 @@ class VideoProcessor:
                                     config=config,
                                 ):
                                     continue
-                                record = self._save_violation(
+                                record = self._prepare_violation_record(
                                     frame=frame,
                                     vehicle_bbox=bbox,
                                     plate_bbox=plate_bbox,
@@ -819,7 +847,7 @@ class VideoProcessor:
                                         config=config,
                                     ):
                                         continue
-                                    record = self._save_violation(
+                                    record = self._prepare_violation_record(
                                         frame=frame,
                                         vehicle_bbox=bbox,
                                         plate_bbox=plate_bbox,
