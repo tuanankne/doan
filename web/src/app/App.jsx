@@ -1,5 +1,6 @@
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
+import FineManagementPage from "../features/fine-management/pages/FineManagementPage";
 import VideoConfig from "../features/video-config/components/VideoConfig";
 
 export default function App() {
@@ -18,6 +19,9 @@ export default function App() {
               <NavLink to="/config" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
                 Cấu hình video
               </NavLink>
+              <NavLink to="/fines" className={({ isActive }) => (isActive ? "nav-pill active" : "nav-pill")}>
+                Quản lý mức phạt
+              </NavLink>
             </nav>
           </div>
         </header>
@@ -26,6 +30,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/config" element={<VideoConfig />} />
+            <Route path="/fines" element={<FineManagementPage />} />
           </Routes>
         </main>
       </div>

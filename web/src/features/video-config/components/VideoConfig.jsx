@@ -553,6 +553,7 @@ export default function VideoConfig({
               <thead>
                 <tr>
                   <th>Thời gian</th>
+                  <th>Mã lỗi</th>
                   <th>Biển số (có thể sửa)</th>
                   <th>Loại lỗi</th>
                   <th>Ảnh toàn cảnh</th>
@@ -563,6 +564,7 @@ export default function VideoConfig({
                 {editableViolations.map((item, index) => (
                   <tr key={`${item.detected_at || ""}-${index}`}>
                     <td>{formatDate(item.detected_at)}</td>
+                    <td>{item.violation_code || "-"}</td>
                     <td style={{ minWidth: 180 }}>
                       <input
                         value={item.detected_license_plate || ""}

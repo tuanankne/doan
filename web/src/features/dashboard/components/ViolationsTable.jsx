@@ -56,6 +56,19 @@ function formatStatus(value) {
   return value;
 }
 
+function formatMoney(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Chưa có mức phạt";
+  }
+
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return "Chưa có mức phạt";
+  }
+
+  return `${amount.toLocaleString("vi-VN")} ₫`;
+}
+
 export default function ViolationsTable({ violations, loading, error, onRefresh }) {
   return (
     <section className="section-card" style={{ marginTop: 16 }}>
@@ -76,6 +89,7 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
               <th>Thời gian</th>
               <th>Biển số</th>
               <th>Loại lỗi</th>
+              <th>Mức phạt</th>
               <th>Trạng thái</th>
               <th>Ảnh toàn cảnh</th>
               <th>Ảnh biển số</th>
@@ -85,7 +99,7 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
           <tbody>
             {violations.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="empty-note">
+                <td colSpan={8} className="empty-note">
                   Chưa có dữ liệu vi phạm.
                 </td>
               </tr>
@@ -96,6 +110,9 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
                 <td>{formatDate(item.detected_at)}</td>
                 <td>{item.detected_license_plate || "Không đọc được"}</td>
                 <td>{formatViolationType(item.violation_type)}</td>
+                <td>
+                  <div>{formatMoney(item.fine_amount_snapshot)}</div>
+                </td>
                 <td>
                   <span className={getStatusClassName(item.status)}>{formatStatus(item.status)}</span>
                 </td>

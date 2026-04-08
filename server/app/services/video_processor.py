@@ -79,6 +79,7 @@ class VideoProcessor:
         supabase_key: Optional[str] = None,
         storage_bucket: str = "violations",
         violations_table: str = "violations",
+        violation_penalties_table: str = "violation_penalties",
         ocr_languages: Optional[Sequence[str]] = None,
         supabase_client: Optional[Client] = None,
     ) -> None:
@@ -96,6 +97,7 @@ class VideoProcessor:
             self.supabase = create_client(supabase_url, supabase_key)
         self.storage_bucket = storage_bucket
         self.violations_table = violations_table
+        self.violation_penalties_table = violation_penalties_table
         self.ocr_languages = list(ocr_languages or ["en"])
         self.ocr_reader = easyocr.Reader(self.ocr_languages, gpu=False)
 
@@ -104,6 +106,7 @@ class VideoProcessor:
         self.last_violation_frame: Dict[Tuple[int, str], int] = {}
         self.track_violations_committed: Dict[int, set[str]] = defaultdict(set)
         self.recent_violations: Deque[Dict[str, Any]] = deque(maxlen=500)
+        self._penalty_lookup_cache: Optional[Dict[str, Dict[str, Any]]] = None
         self._bucket_ready = False
         self.vehicle_class_ids = self._infer_vehicle_class_ids(self.vehicle_model.names)
         self.plate_class_ids = self._infer_plate_class_ids()
@@ -362,6 +365,79 @@ class VideoProcessor:
         text = raw_text.upper().strip()
         text = re.sub(r"[^A-Z0-9]", "", text)
         return text
+
+    @staticmethod
+    def _normalize_violation_code(value: str) -> str:
+        text = (value or "").upper().strip()
+        text = re.sub(r"[^A-Z0-9]+", "_", text)
+        text = re.sub(r"_+", "_", text)
+        return text.strip("_")
+
+    def _load_penalty_lookup(self) -> Dict[str, Dict[str, Any]]:
+        if self._penalty_lookup_cache is not None:
+            return self._penalty_lookup_cache
+
+        lookup: Dict[str, Dict[str, Any]] = {}
+        try:
+            response = (
+                self.supabase.table(self.violation_penalties_table)
+                .select("violation_code, violation_name, fine_amount, is_active")
+                .execute()
+            )
+            rows = self._extract_rows(response)
+            for row in rows:
+                code = self._normalize_violation_code(str(row.get("violation_code", "")))
+                if not code:
+                    continue
+                lookup[code] = row
+        except Exception:
+            # Fallback to default mapping if violation_penalties table is unavailable.
+            lookup = {}
+
+        self._penalty_lookup_cache = lookup
+        return lookup
+
+    @classmethod
+    def _default_violation_name(cls, violation_type: str, violation_code: str) -> str:
+        code = cls._normalize_violation_code(violation_code)
+        if code == "VUOT_DEN_DO":
+            return "Vượt đèn đỏ"
+        if code == "NGUOC_CHIEU":
+            return "Ngược chiều"
+        return (violation_type or code).strip() or "Lỗi khác"
+
+    def _violation_meta(
+        self,
+        violation_type: str,
+        violation_code: Optional[str] = None,
+    ) -> Tuple[str, str, Optional[int]]:
+        code = self._normalize_violation_code(violation_code or "")
+        normalized_type = self._normalize_violation_code(violation_type)
+
+        if not code:
+            if normalized_type in {"VUOT_DEN_DO", "VƯỢT_ĐÈN_ĐỎ", "RED_LIGHT"}:
+                code = "VUOT_DEN_DO"
+            elif normalized_type in {"NGUOC_CHIEU", "NGƯỢC_CHIỀU", "WRONG_WAY"}:
+                code = "NGUOC_CHIEU"
+            else:
+                code = normalized_type or "KHAC"
+
+        display = self._default_violation_name(violation_type, code)
+        fine_amount_snapshot: Optional[int] = None
+        penalty = self._load_penalty_lookup().get(code)
+        if penalty:
+            mapped_name = str(penalty.get("violation_name", "")).strip()
+            if mapped_name:
+                display = mapped_name
+
+            fine_amount_raw = penalty.get("fine_amount")
+            if fine_amount_raw is not None:
+                try:
+                    fine_amount_snapshot = int(fine_amount_raw)
+                except (TypeError, ValueError):
+                    fine_amount_snapshot = None
+
+        return code, display, fine_amount_snapshot
 
     @staticmethod
     def _safe_crop(frame: np.ndarray, bbox: BBox) -> Optional[np.ndarray]:
@@ -632,6 +708,7 @@ class VideoProcessor:
         vehicle_bbox: BBox,
         plate_bbox: Optional[BBox],
         violation_type: str,
+        violation_code: str,
         plate_text: str,
         event_time: datetime,
     ) -> Dict[str, Any]:
@@ -667,6 +744,7 @@ class VideoProcessor:
 
         record = {
             "detected_license_plate": plate_text or "UNKNOWN",
+            "violation_code": violation_code,
             "violation_type": violation_type,
             "evidence_image_url": scene_url,
             "evidence_plate_url": plate_url,
@@ -679,7 +757,12 @@ class VideoProcessor:
         inserted = 0
         for item in violations:
             plate_text = self._sanitize_plate_text(str(item.get("detected_license_plate", "")))
-            violation_type = str(item.get("violation_type", "")).strip()
+            raw_violation_type = str(item.get("violation_type", "")).strip()
+            raw_violation_code = str(item.get("violation_code", "")).strip()
+            violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
+                raw_violation_type,
+                raw_violation_code,
+            )
             evidence_image_url = str(item.get("evidence_image_url", "")).strip()
             evidence_plate_url = str(item.get("evidence_plate_url", "")).strip()
             detected_at = str(item.get("detected_at", "")).strip()
@@ -695,14 +778,25 @@ class VideoProcessor:
             record = {
                 "vehicle_id": vehicle_id,
                 "detected_license_plate": plate_text or "UNKNOWN",
+                "violation_code": violation_code,
                 "violation_type": violation_type,
+                "fine_amount_snapshot": fine_amount_snapshot,
                 "evidence_image_url": evidence_image_url,
                 "evidence_plate_url": evidence_plate_url,
                 "detected_at": detected_at,
                 "status": "pending",
             }
 
-            self.supabase.table(self.violations_table).insert(record).execute()
+            try:
+                self.supabase.table(self.violations_table).insert(record).execute()
+            except Exception:
+                # Backward compatibility for old schema where violations has no violation_code column.
+                fallback_record = {
+                    k: v
+                    for k, v in record.items()
+                    if k not in {"violation_code", "fine_amount_snapshot"}
+                }
+                self.supabase.table(self.violations_table).insert(fallback_record).execute()
             inserted += 1
 
         return inserted
@@ -797,7 +891,10 @@ class VideoProcessor:
                             key = (track_id, "red_light")
                             last_frame = self.last_violation_frame.get(key, -10**9)
                             if frame_idx - last_frame >= cooldown_frames:
-                                violation_type = "Vuot den do"
+                                violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
+                                    "Vượt đèn đỏ",
+                                    "VUOT_DEN_DO",
+                                )
                                 if self._is_duplicate_violation(
                                     track_id=track_id,
                                     violation_type=violation_type,
@@ -813,9 +910,11 @@ class VideoProcessor:
                                     vehicle_bbox=bbox,
                                     plate_bbox=plate_bbox,
                                     violation_type=violation_type,
+                                    violation_code=violation_code,
                                     plate_text=plate_text,
                                     event_time=current_time,
                                 )
+                                record["fine_amount_snapshot"] = fine_amount_snapshot
                                 violations.append(record)
                                 self.last_violation_frame[key] = frame_idx
                                 self._mark_violation_seen(track_id, violation_type, bbox, plate_text, frame_idx)
@@ -836,7 +935,10 @@ class VideoProcessor:
                                 key = (track_id, "wrong_way")
                                 last_frame = self.last_violation_frame.get(key, -10**9)
                                 if frame_idx - last_frame >= cooldown_frames:
-                                    violation_type = "Nguoc chieu"
+                                    violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
+                                        "Ngược chiều",
+                                        "NGUOC_CHIEU",
+                                    )
                                     if self._is_duplicate_violation(
                                         track_id=track_id,
                                         violation_type=violation_type,
@@ -852,9 +954,11 @@ class VideoProcessor:
                                         vehicle_bbox=bbox,
                                         plate_bbox=plate_bbox,
                                         violation_type=violation_type,
+                                        violation_code=violation_code,
                                         plate_text=plate_text,
                                         event_time=current_time,
                                     )
+                                    record["fine_amount_snapshot"] = fine_amount_snapshot
                                     violations.append(record)
                                     self.last_violation_frame[key] = frame_idx
                                     self._mark_violation_seen(track_id, violation_type, bbox, plate_text, frame_idx)

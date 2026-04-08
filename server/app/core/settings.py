@@ -13,6 +13,7 @@ class AppSettings:
     supabase_key: str
     storage_bucket: str
     violations_table: str
+    violation_penalties_table: str
     model_path: str
 
 
@@ -46,6 +47,7 @@ def load_settings() -> AppSettings:
     )
     storage_bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "violations").strip()
     violations_table = os.getenv("SUPABASE_VIOLATIONS_TABLE", "violations").strip()
+    violation_penalties_table = os.getenv("SUPABASE_VIOLATION_PENALTIES_TABLE", "violation_penalties").strip()
 
     if not supabase_url or not supabase_key:
         raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_SECRET)")
@@ -58,5 +60,6 @@ def load_settings() -> AppSettings:
         supabase_key=supabase_key,
         storage_bucket=storage_bucket,
         violations_table=violations_table,
+        violation_penalties_table=violation_penalties_table,
         model_path=model_path,
     )

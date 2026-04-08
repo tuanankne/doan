@@ -4,23 +4,51 @@ import { supabase } from "../../../shared/lib/supabaseClient";
 
 const VIOLATIONS_TABLE = import.meta.env.VITE_SUPABASE_VIOLATIONS_TABLE || "violations";
 
+function normalizeText(value) {
+  return (value || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function getViolationCode(item) {
+  const code = normalizeText(item?.violation_code || "");
+  if (code) {
+    return code;
+  }
+
+  const typeCode = normalizeText(item?.violation_type || "");
+  if (typeCode === "VUOT_DEN_DO" || typeCode === "VƯỢT_ĐÈN_ĐỎ" || typeCode === "RED_LIGHT") {
+    return "VUOT_DEN_DO";
+  }
+  if (typeCode === "NGUOC_CHIEU" || typeCode === "NGƯỢC_CHIỀU" || typeCode === "WRONG_WAY") {
+    return "NGUOC_CHIEU";
+  }
+  return typeCode;
+}
+
 export default function DashboardPage() {
   const [violations, setViolations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadViolations = useCallback(async () => {
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError("");
 
-    const { data, error: queryError } = await supabase
+    const { data, error: violationsError } = await supabase
       .from(VIOLATIONS_TABLE)
-      .select("id, vehicle_id, detected_license_plate, violation_type, evidence_image_url, evidence_plate_url, detected_at, status")
+      .select(
+        "id, vehicle_id, detected_license_plate, violation_code, violation_type, evidence_image_url, evidence_plate_url, detected_at, status, fine_amount_snapshot"
+      )
       .order("detected_at", { ascending: false })
       .limit(200);
 
-    if (queryError) {
-      setError(queryError.message);
+    if (violationsError) {
+      setError(violationsError.message);
       setViolations([]);
       setLoading(false);
       return;
@@ -31,8 +59,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadViolations();
-  }, [loadViolations]);
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   useEffect(() => {
     const channel = supabase
@@ -41,7 +69,7 @@ export default function DashboardPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: VIOLATIONS_TABLE },
         () => {
-          loadViolations();
+          loadDashboardData();
         }
       )
       .subscribe();
@@ -49,22 +77,39 @@ export default function DashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadViolations]);
+  }, [loadDashboardData]);
+
+  const enrichedViolations = useMemo(() => {
+    return violations.map((item) => {
+      const violationCode = getViolationCode(item);
+
+      return {
+        ...item,
+        violation_code: violationCode,
+        fine_amount_snapshot: item?.fine_amount_snapshot ?? null,
+      };
+    });
+  }, [violations]);
 
   const stats = useMemo(() => {
-    const redLight = violations.filter(
+    const redLight = enrichedViolations.filter(
       (item) => item.violation_type === "Vượt đèn đỏ" || item.violation_type === "Vuot den do"
     ).length;
-    const wrongWay = violations.filter(
+    const wrongWay = enrichedViolations.filter(
       (item) => item.violation_type === "Ngược chiều" || item.violation_type === "Nguoc chieu"
     ).length;
+    const totalFine = enrichedViolations.reduce(
+      (sum, item) => sum + Number(item.fine_amount_snapshot || 0),
+      0
+    );
 
     return {
-      total: violations.length,
+      total: enrichedViolations.length,
       redLight,
       wrongWay,
+      totalFine,
     };
-  }, [violations]);
+  }, [enrichedViolations]);
 
   return (
     <div>
@@ -79,16 +124,22 @@ export default function DashboardPage() {
         <StatCard title="Tổng vi phạm" value={stats.total} />
         <StatCard title="Vượt đèn đỏ" value={stats.redLight} />
         <StatCard title="Đi ngược chiều" value={stats.wrongWay} />
+        <StatCard title="Tổng tiền phạt ước tính" value={formatMoney(stats.totalFine)} />
       </section>
 
       <ViolationsTable
-        violations={violations}
+        violations={enrichedViolations}
         loading={loading}
         error={error}
-        onRefresh={loadViolations}
+        onRefresh={loadDashboardData}
       />
     </div>
   );
+}
+
+function formatMoney(value) {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString("vi-VN")} ₫`;
 }
 
 function StatCard({ title, value }) {

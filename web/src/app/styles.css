@@ -423,6 +423,21 @@ textarea {
   gap: 10px;
 }
 
+.fine-form {
+  display: grid;
+  gap: 12px;
+}
+
+.fine-grid {
+  margin-top: 0;
+}
+
+.actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .processing-progress-wrap {
   margin-top: 12px;
   border: 1px solid var(--line);

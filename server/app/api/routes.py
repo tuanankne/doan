@@ -17,6 +17,10 @@ from app.schemas.api_models import (
     ConfirmViolationsRequest,
     ConfirmViolationsResponse,
     ProcessVideoResponse,
+    ViolationPenaltyCreateRequest,
+    ViolationPenaltyListResponse,
+    ViolationPenaltyResponse,
+    ViolationPenaltyUpdateRequest,
     UploadImageResponse,
 )
 from app.services.supabase_service import SupabaseStorageService
@@ -86,6 +90,7 @@ def build_app() -> FastAPI:
                 model_path=settings.model_path,
                 storage_bucket=settings.storage_bucket,
                 violations_table=settings.violations_table,
+                violation_penalties_table=settings.violation_penalties_table,
                 supabase_client=supabase_client,
             )
             violations = processor.process_video(temp_path, processing_config)
@@ -140,12 +145,102 @@ def build_app() -> FastAPI:
                 model_path=settings.model_path,
                 storage_bucket=settings.storage_bucket,
                 violations_table=settings.violations_table,
+                violation_penalties_table=settings.violation_penalties_table,
                 supabase_client=supabase_client,
             )
             saved_count = processor.save_confirmed_violations(payload.violations)
             return ConfirmViolationsResponse(saved_count=saved_count)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Lưu vi phạm thất bại: {exc}") from exc
+
+    @router.get("/violation-penalties", response_model=ViolationPenaltyListResponse)
+    async def list_violation_penalties() -> ViolationPenaltyListResponse:
+        try:
+            response = (
+                supabase_client.table(settings.violation_penalties_table)
+                .select("id, violation_code, violation_name, fine_amount, description, is_active, created_at, updated_at")
+                .order("updated_at", desc=True)
+                .execute()
+            )
+            items = getattr(response, "data", None) or []
+            return ViolationPenaltyListResponse(items=items)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tải danh sách mức phạt: {exc}") from exc
+
+    @router.post("/violation-penalties", response_model=ViolationPenaltyResponse)
+    async def create_violation_penalty(
+        payload: ViolationPenaltyCreateRequest,
+    ) -> ViolationPenaltyResponse:
+        try:
+            response = (
+                supabase_client.table(settings.violation_penalties_table)
+                .insert(
+                    {
+                        "violation_code": payload.violation_code.strip(),
+                        "violation_name": payload.violation_name.strip(),
+                        "fine_amount": payload.fine_amount,
+                        "description": payload.description.strip() if payload.description else None,
+                        "is_active": payload.is_active,
+                    }
+                )
+                .execute()
+            )
+            items = getattr(response, "data", None) or []
+            if not items:
+                raise RuntimeError("Create penalty returned no data")
+            return ViolationPenaltyResponse(**items[0])
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tạo mức phạt: {exc}") from exc
+
+    @router.put("/violation-penalties/{id}", response_model=ViolationPenaltyResponse)
+    async def update_violation_penalty(
+        id: str,
+        payload: ViolationPenaltyUpdateRequest,
+    ) -> ViolationPenaltyResponse:
+        update_data = payload.model_dump(exclude_unset=True)
+        if "violation_code" in update_data and isinstance(update_data["violation_code"], str):
+            update_data["violation_code"] = update_data["violation_code"].strip()
+        if "violation_name" in update_data and isinstance(update_data["violation_name"], str):
+            update_data["violation_name"] = update_data["violation_name"].strip()
+        if "description" in update_data and isinstance(update_data.get("description"), str):
+            update_data["description"] = update_data["description"].strip()
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Không có dữ liệu để cập nhật")
+
+        try:
+            response = (
+                supabase_client.table(settings.violation_penalties_table)
+                .update(update_data)
+                .eq("id", id)
+                .execute()
+            )
+            items = getattr(response, "data", None) or []
+            if not items:
+                raise HTTPException(status_code=404, detail="Không tìm thấy mức phạt")
+            return ViolationPenaltyResponse(**items[0])
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể cập nhật mức phạt: {exc}") from exc
+
+    @router.delete("/violation-penalties/{id}")
+    async def delete_violation_penalty(id: str) -> Dict[str, bool]:
+        try:
+            response = (
+                supabase_client.table(settings.violation_penalties_table)
+                .delete()
+                .eq("id", id)
+                .execute()
+            )
+            items = getattr(response, "data", None) or []
+            if not items:
+                raise HTTPException(status_code=404, detail="Không tìm thấy mức phạt")
+            return {"success": True}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể xóa mức phạt: {exc}") from exc
 
     app.include_router(router)
     return app

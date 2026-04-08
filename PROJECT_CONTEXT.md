@@ -13,10 +13,12 @@ Hệ thống phát hiện vi phạm giao thông từ video, gồm:
 ## 2) Kiến trúc tổng quan
 - Backend: FastAPI (xử lý video, suy luận AI, lưu Supabase)
 - Frontend: React + Vite (dashboard và trang cấu hình video)
+- Frontend: React + Vite (dashboard, trang cấu hình video và trang quản lý mức phạt)
 - AI models:
   - `server/models/ver2.pt`: model nhận diện biển số/ký tự (đang dùng cho plate detect + decode + OCR fallback)
   - `server/models/yolo11n.pt`: model track phương tiện
 - Database/Storage: Supabase (table vi phạm + bucket ảnh)
+- Database/Storage: Supabase (table vi phạm, bảng mức phạt + bucket ảnh)
 
 ## 3) Cấu trúc thư mục hiện tại
 
@@ -60,6 +62,9 @@ doan/
         video-config/
           components/
             VideoConfig.jsx    # Upload video + vẽ line/vector + gửi backend
+        fine-management/
+          pages/
+            FineManagementPage.jsx # CRUD mức phạt vi phạm
       shared/
         lib/
           supabaseClient.js
@@ -88,6 +93,11 @@ doan/
    - Insert record vào bảng vi phạm Supabase
 6. API trả về danh sách vi phạm đã ghi.
 
+### 4.3 Luồng quản lý mức phạt
+1. Trang `/fines` dùng để thêm/sửa/xóa các quy định mức phạt.
+2. Frontend gọi backend CRUD trên bảng `violation_penalties`.
+3. Bảng này lưu mã lỗi, tên lỗi, mức phạt tiền, mô tả và trạng thái áp dụng.
+
 ### 4.2 Luồng dashboard realtime
 1. Trang `/` query bảng vi phạm (200 bản ghi mới nhất).
 2. Subcribe `postgres_changes` của Supabase để tự reload khi có thay đổi.
@@ -114,6 +124,18 @@ doan/
   - `file_name`
   - `storage_url`
 
+### GET /api/v1/violation-penalties
+- Lấy danh sách mức phạt
+
+### POST /api/v1/violation-penalties
+- Tạo mức phạt mới
+
+### PUT /api/v1/violation-penalties/{id}
+- Cập nhật mức phạt
+
+### DELETE /api/v1/violation-penalties/{id}
+- Xóa mức phạt
+
 ## 6) Biến môi trường quan trọng
 
 ### Backend (`server/.env`)
@@ -121,6 +143,7 @@ doan/
 - `SUPABASE_SERVICE_ROLE_KEY` (hoặc `SUPABASE_ANON_SECRET` fallback)
 - `SUPABASE_STORAGE_BUCKET` (mặc định: `violations`)
 - `SUPABASE_VIOLATIONS_TABLE` (mặc định: `violations`)
+- `SUPABASE_VIOLATION_PENALTIES_TABLE` (mặc định: `violation_penalties`)
 - `YOLO_MODEL_PATH` (mặc định: `models/ver2.pt`)
 - `VEHICLE_TRACKER_MODEL` (mặc định: `models/yolo11n.pt`)
 
@@ -153,6 +176,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - `video_processor.py` hiện dùng 2 model:
   - model phương tiện (`vehicle_model`) cho tracking
   - model chính (`model`) cho plate/char detection + OCR fallback
+- Trang `/fines` dùng CRUD backend để quản lý bảng `violation_penalties`.
+- Dashboard `/` hiện map dữ liệu vi phạm với bảng `violation_penalties` để hiển thị mức phạt ước tính.
+- Đề xuất schema mới: `violations.violation_code` + `violations.fine_amount_snapshot` để map mức phạt theo mã lỗi và giữ lịch sử mức phạt ổn định theo thời điểm vi phạm.
 - Thư mục `app/.idea` ở root là file IDE, có thể bỏ qua khi coding.
 
 ## 9) Checklist khi debug nhanh
