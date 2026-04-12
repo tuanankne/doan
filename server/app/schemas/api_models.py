@@ -23,12 +23,43 @@ class ConfirmViolationsResponse(BaseModel):
     saved_count: int
 
 
+class ViolationRecordResponse(BaseModel):
+    id: Optional[str] = None
+    vehicle_id: Optional[str] = None
+    detected_license_plate: str
+    violation_code: Optional[str] = None
+    violation_type: str
+    fine_amount_snapshot: Optional[int] = None
+    evidence_image_url: str
+    evidence_plate_url: Optional[str] = None
+    detected_at: Optional[str] = None
+    status: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    owner_citizen_id: Optional[str] = None
+    owner_full_name: Optional[str] = None
+    owner_phone_number: Optional[str] = None
+    owner_address: Optional[str] = None
+    vehicle_brand: Optional[str] = None
+    vehicle_color: Optional[str] = None
+    vehicle_frame_number: Optional[str] = None
+    vehicle_engine_number: Optional[str] = None
+    vehicle_registration_date: Optional[str] = None
+    vehicle_registration_expiry_date: Optional[str] = None
+    vehicle_issuing_authority: Optional[str] = None
+    vehicle_registration_status: Optional[str] = None
+
+
+class ViolationListResponse(BaseModel):
+    items: List[ViolationRecordResponse]
+
+
 class ViolationPenaltyBase(BaseModel):
     violation_code: str
     violation_name: str
     fine_amount: int
     description: Optional[str] = None
     is_active: bool = True
+    vehicle_type: Optional[str] = None
 
 
 class ViolationPenaltyCreateRequest(ViolationPenaltyBase):

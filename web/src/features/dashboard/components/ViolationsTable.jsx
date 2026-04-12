@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -70,6 +72,16 @@ function formatMoney(value) {
 }
 
 export default function ViolationsTable({ violations, loading, error, onRefresh }) {
+  const [selectedOwner, setSelectedOwner] = useState(null);
+
+  const openOwnerModal = (item) => {
+    setSelectedOwner(item);
+  };
+
+  const closeOwnerModal = () => {
+    setSelectedOwner(null);
+  };
+
   return (
     <section className="section-card" style={{ marginTop: 16 }}>
       <div className="section-head">
@@ -88,18 +100,19 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
             <tr>
               <th>Thời gian</th>
               <th>Biển số</th>
+              <th>Loại xe</th>
+              <th>Chủ xe</th>
               <th>Loại lỗi</th>
               <th>Mức phạt</th>
               <th>Trạng thái</th>
               <th>Ảnh toàn cảnh</th>
               <th>Ảnh biển số</th>
-              <th>ID</th>
             </tr>
           </thead>
           <tbody>
             {violations.length === 0 && !loading ? (
               <tr>
-                <td colSpan={8} className="empty-note">
+                <td colSpan={9} className="empty-note">
                   Chưa có dữ liệu vi phạm.
                 </td>
               </tr>
@@ -109,6 +122,27 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
               <tr key={item.id || `${item.detected_at}-${item.detected_license_plate || "unknown"}`}>
                 <td>{formatDate(item.detected_at)}</td>
                 <td>{item.detected_license_plate || "Không đọc được"}</td>
+                <td>{item.vehicle_type || "Không xác định"}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => openOwnerModal(item)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      textAlign: "left",
+                      cursor: "pointer",
+                      color: "#1b4d3e",
+                    }}
+                    title="Xem giấy đăng ký xe"
+                  >
+                    <div style={{ fontWeight: 600 }}>{item.owner_full_name || "Chưa có"}</div>
+                    <div className="hint" style={{ fontSize: 12 }}>
+                      {item.owner_citizen_id || ""}
+                    </div>
+                  </button>
+                </td>
                 <td>{formatViolationType(item.violation_type)}</td>
                 <td>
                   <div>{formatMoney(item.fine_amount_snapshot)}</div>
@@ -134,12 +168,55 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
                     "-"
                   )}
                 </td>
-                <td>{item.id || "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {selectedOwner ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={closeOwnerModal}
+        >
+          <div
+            className="section-card"
+            style={{ width: "min(680px, 92vw)", maxHeight: "86vh", overflow: "auto" }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="section-head">
+              <h3>Thông tin giấy đăng ký xe</h3>
+              <button type="button" className="btn" onClick={closeOwnerModal}>
+                Đóng
+              </button>
+            </div>
+            <div className="form-grid" style={{ marginTop: 8 }}>
+              <div><strong>Biển số:</strong> {selectedOwner.detected_license_plate || "-"}</div>
+              <div><strong>Loại xe:</strong> {selectedOwner.vehicle_type || "-"}</div>
+              <div><strong>Chủ xe:</strong> {selectedOwner.owner_full_name || "-"}</div>
+              <div><strong>CCCD:</strong> {selectedOwner.owner_citizen_id || "-"}</div>
+              <div><strong>SĐT:</strong> {selectedOwner.owner_phone_number || "-"}</div>
+              <div><strong>Địa chỉ:</strong> {selectedOwner.owner_address || "-"}</div>
+              <div><strong>Hãng xe:</strong> {selectedOwner.vehicle_brand || "-"}</div>
+              <div><strong>Màu xe:</strong> {selectedOwner.vehicle_color || "-"}</div>
+              <div><strong>Số khung:</strong> {selectedOwner.vehicle_frame_number || "-"}</div>
+              <div><strong>Số máy:</strong> {selectedOwner.vehicle_engine_number || "-"}</div>
+              <div><strong>Ngày đăng ký:</strong> {selectedOwner.vehicle_registration_date || "-"}</div>
+              <div><strong>Hạn đăng ký:</strong> {selectedOwner.vehicle_registration_expiry_date || "-"}</div>
+              <div><strong>Cơ quan cấp:</strong> {selectedOwner.vehicle_issuing_authority || "-"}</div>
+              <div><strong>Trạng thái ĐK:</strong> {selectedOwner.vehicle_registration_status || "-"}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

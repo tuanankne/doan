@@ -20,11 +20,17 @@ function normalizePoint(point) {
   return [Number(point.x.toFixed(2)), Number(point.y.toFixed(2))];
 }
 
+function normalizeApiBaseUrl(baseUrl) {
+  const value = (baseUrl || "").trim().replace(/\/+$/, "");
+  return value.replace(/\/api\/v1$/, "");
+}
+
 export default function VideoConfig({
   apiBaseUrl = "http://localhost:8000",
   processEndpoint = "/api/v1/process-video",
   confirmEndpoint = "/api/v1/confirm-violations",
 }) {
+  const normalizedApiBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
   const videoRef = useRef(null);
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState("");
@@ -50,6 +56,7 @@ export default function VideoConfig({
   const [successMessage, setSuccessMessage] = useState("");
   const [resultSummary, setResultSummary] = useState(null);
   const [editableViolations, setEditableViolations] = useState([]);
+  const [selectedOwner, setSelectedOwner] = useState(null);
 
   const stopLineFlat = useMemo(
     () => stopLinePoints.flatMap((p) => [p.x, p.y]),
@@ -240,7 +247,7 @@ export default function VideoConfig({
       formData.append("video", videoFile);
       formData.append("config", JSON.stringify(configPayload));
 
-      const url = `${apiBaseUrl}${processEndpoint}`;
+      const url = `${normalizedApiBaseUrl}${processEndpoint}`;
       const response = await axios.post(url, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
@@ -253,6 +260,11 @@ export default function VideoConfig({
         violations.map((item) => ({
           ...item,
           detected_license_plate: item.detected_license_plate || "",
+          vehicle_type: item.vehicle_type || "Không xác định",
+          owner_citizen_id: item.owner_citizen_id || "",
+          owner_full_name: item.owner_full_name || "",
+          owner_phone_number: item.owner_phone_number || "",
+          owner_address: item.owner_address || "",
         }))
       );
       setResultSummary({ total_violations: response.data?.total_violations || violations.length });
@@ -285,6 +297,18 @@ export default function VideoConfig({
     );
   };
 
+  const handleRemoveViolation = (index) => {
+    setEditableViolations((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const openOwnerModal = (item) => {
+    setSelectedOwner(item);
+  };
+
+  const closeOwnerModal = () => {
+    setSelectedOwner(null);
+  };
+
   const confirmSaveToSupabase = async () => {
     if (!editableViolations.length || isConfirming) {
       return;
@@ -295,7 +319,7 @@ export default function VideoConfig({
     setSuccessMessage("");
 
     try {
-      const url = `${apiBaseUrl}${confirmEndpoint}`;
+      const url = `${normalizedApiBaseUrl}${confirmEndpoint}`;
       const response = await axios.post(
         url,
         {
@@ -554,10 +578,13 @@ export default function VideoConfig({
                 <tr>
                   <th>Thời gian</th>
                   <th>Mã lỗi</th>
+                  <th>Loại xe</th>
+                  <th>Chủ xe</th>
                   <th>Biển số (có thể sửa)</th>
                   <th>Loại lỗi</th>
                   <th>Ảnh toàn cảnh</th>
                   <th>Ảnh biển số</th>
+                  <th>Hành động</th>
                 </tr>
               </thead>
               <tbody>
@@ -565,6 +592,27 @@ export default function VideoConfig({
                   <tr key={`${item.detected_at || ""}-${index}`}>
                     <td>{formatDate(item.detected_at)}</td>
                     <td>{item.violation_code || "-"}</td>
+                    <td>{item.vehicle_type || "Không xác định"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => openOwnerModal(item)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          color: "#1b4d3e",
+                        }}
+                        title="Xem giấy đăng ký xe"
+                      >
+                        <div style={{ fontWeight: 600 }}>{item.owner_full_name || "Chưa có"}</div>
+                        <div className="hint" style={{ fontSize: 12 }}>
+                          {item.owner_citizen_id || ""}
+                        </div>
+                      </button>
+                    </td>
                     <td style={{ minWidth: 180 }}>
                       <input
                         value={item.detected_license_plate || ""}
@@ -591,6 +639,11 @@ export default function VideoConfig({
                         "-"
                       )}
                     </td>
+                    <td>
+                      <button type="button" className="btn btn-danger" onClick={() => handleRemoveViolation(index)}>
+                        Xóa
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -611,6 +664,50 @@ export default function VideoConfig({
           </div>
         ) : null}
       </section>
+
+      {selectedOwner ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={closeOwnerModal}
+        >
+          <div
+            className="section-card"
+            style={{ width: "min(680px, 92vw)", maxHeight: "86vh", overflow: "auto" }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="section-head">
+              <h3>Thông tin giấy đăng ký xe</h3>
+              <button type="button" className="btn" onClick={closeOwnerModal}>
+                Đóng
+              </button>
+            </div>
+            <div className="form-grid" style={{ marginTop: 8 }}>
+              <div><strong>Biển số:</strong> {selectedOwner.detected_license_plate || "-"}</div>
+              <div><strong>Loại xe:</strong> {selectedOwner.vehicle_type || "-"}</div>
+              <div><strong>Chủ xe:</strong> {selectedOwner.owner_full_name || "-"}</div>
+              <div><strong>CCCD:</strong> {selectedOwner.owner_citizen_id || "-"}</div>
+              <div><strong>SĐT:</strong> {selectedOwner.owner_phone_number || "-"}</div>
+              <div><strong>Địa chỉ:</strong> {selectedOwner.owner_address || "-"}</div>
+              <div><strong>Hãng xe:</strong> {selectedOwner.vehicle_brand || "-"}</div>
+              <div><strong>Màu xe:</strong> {selectedOwner.vehicle_color || "-"}</div>
+              <div><strong>Số khung:</strong> {selectedOwner.vehicle_frame_number || "-"}</div>
+              <div><strong>Số máy:</strong> {selectedOwner.vehicle_engine_number || "-"}</div>
+              <div><strong>Ngày đăng ký:</strong> {selectedOwner.vehicle_registration_date || "-"}</div>
+              <div><strong>Hạn đăng ký:</strong> {selectedOwner.vehicle_registration_expiry_date || "-"}</div>
+              <div><strong>Cơ quan cấp:</strong> {selectedOwner.vehicle_issuing_authority || "-"}</div>
+              <div><strong>Trạng thái ĐK:</strong> {selectedOwner.vehicle_registration_status || "-"}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

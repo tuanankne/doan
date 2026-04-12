@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,8 @@ from app.schemas.api_models import (
     ConfirmViolationsRequest,
     ConfirmViolationsResponse,
     ProcessVideoResponse,
+    ViolationListResponse,
+    ViolationRecordResponse,
     ViolationPenaltyCreateRequest,
     ViolationPenaltyListResponse,
     ViolationPenaltyResponse,
@@ -27,6 +31,9 @@ from app.schemas.api_models import (
 )
 from app.services.supabase_service import SupabaseStorageService
 from app.services.video_processor import ProcessingConfig, VideoProcessor
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_app() -> FastAPI:
@@ -104,6 +111,7 @@ def build_app() -> FastAPI:
         except HTTPException:
             raise
         except Exception as exc:
+            logger.exception("Processing video failed")
             raise HTTPException(status_code=500, detail=f"Processing failed: {exc}") from exc
         finally:
             try:
@@ -155,12 +163,167 @@ def build_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Lưu vi phạm thất bại: {exc}") from exc
 
+    @router.get("/violations", response_model=ViolationListResponse)
+    async def list_violations() -> ViolationListResponse:
+        try:
+            def canonical_plate(value: str) -> str:
+                return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+            def safe_decrypt(value: Any) -> str:
+                from app.core.encryption import decrypt_field
+
+                text = str(value or "").strip()
+                if not text:
+                    return ""
+                try:
+                    return decrypt_field(text)
+                except Exception:
+                    return text
+
+            response = (
+                supabase_client.table(settings.violations_table)
+                .select("id, vehicle_id, detected_license_plate, violation_code, violation_type, fine_amount_snapshot, evidence_image_url, evidence_plate_url, detected_at, status, vehicle_type")
+                .order("detected_at", desc=True)
+                .limit(200)
+                .execute()
+            )
+            rows = getattr(response, "data", None) or []
+            items = []
+
+            for row in rows:
+                vehicle_row = None
+                vehicle_id = row.get("vehicle_id")
+                detected_plate = str(row.get("detected_license_plate", "")).strip()
+                canonical = canonical_plate(detected_plate)
+
+                if vehicle_id:
+                    for select_fields in (
+                        "id, license_plate, citizen_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                        "id, license_plate, profile_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                    ):
+                        try:
+                            vehicle_response = (
+                                supabase_client.table("vehicles")
+                                .select(select_fields)
+                                .eq("id", vehicle_id)
+                                .limit(1)
+                                .execute()
+                            )
+                            vehicle_rows = getattr(vehicle_response, "data", None) or []
+                            vehicle_row = vehicle_rows[0] if vehicle_rows else None
+                            if vehicle_row is not None:
+                                break
+                        except Exception:
+                            continue
+
+                if vehicle_row is None and detected_plate:
+                    for select_fields in (
+                        "id, license_plate, citizen_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                        "id, license_plate, profile_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                    ):
+                        try:
+                            vehicle_response = (
+                                supabase_client.table("vehicles")
+                                .select(select_fields)
+                                .ilike("license_plate", f"%{canonical}%")
+                                .limit(20)
+                                .execute()
+                            )
+                            vehicle_rows = getattr(vehicle_response, "data", None) or []
+                            for candidate in vehicle_rows:
+                                if canonical_plate(str(candidate.get("license_plate", ""))) == canonical:
+                                    vehicle_row = candidate
+                                    break
+                            if vehicle_row is not None:
+                                break
+                        except Exception:
+                            continue
+
+                if vehicle_row is None and canonical:
+                    for select_fields in (
+                        "id, license_plate, citizen_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                        "id, license_plate, profile_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                    ):
+                        try:
+                            vehicle_response = (
+                                supabase_client.table("vehicles")
+                                .select(select_fields)
+                                .limit(1000)
+                                .execute()
+                            )
+                            vehicle_rows = getattr(vehicle_response, "data", None) or []
+                            for candidate in vehicle_rows:
+                                if canonical_plate(str(candidate.get("license_plate", ""))) == canonical:
+                                    vehicle_row = candidate
+                                    break
+                            if vehicle_row is not None:
+                                break
+                        except Exception:
+                            continue
+
+                owner_row: Dict[str, Any] = {}
+                citizen_id = str((vehicle_row or {}).get("citizen_id") or "").strip()
+                profile_id = str((vehicle_row or {}).get("profile_id") or "").strip()
+                if citizen_id:
+                    profile_response = (
+                        supabase_client.table("profiles")
+                        .select("citizen_id, full_name, phone_number, address")
+                        .eq("citizen_id", citizen_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    profile_rows = getattr(profile_response, "data", None) or []
+                    owner_row = profile_rows[0] if profile_rows else {}
+                elif profile_id:
+                    profile_response = (
+                        supabase_client.table("profiles")
+                        .select("id, citizen_id, full_name, phone_number, address")
+                        .eq("id", profile_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    profile_rows = getattr(profile_response, "data", None) or []
+                    owner_row = profile_rows[0] if profile_rows else {}
+                    citizen_id = str(owner_row.get("citizen_id") or "").strip()
+
+                items.append(
+                    ViolationRecordResponse(
+                        id=row.get("id"),
+                        vehicle_id=vehicle_id,
+                        detected_license_plate=detected_plate or "UNKNOWN",
+                        violation_code=row.get("violation_code"),
+                        violation_type=row.get("violation_type") or "",
+                        fine_amount_snapshot=row.get("fine_amount_snapshot"),
+                        evidence_image_url=row.get("evidence_image_url") or "",
+                        evidence_plate_url=row.get("evidence_plate_url"),
+                        detected_at=row.get("detected_at"),
+                        status=row.get("status"),
+                        vehicle_type=row.get("vehicle_type") or (vehicle_row.get("vehicle_type") if vehicle_row else None),
+                        owner_citizen_id=owner_row.get("citizen_id") or citizen_id or None,
+                        owner_full_name=safe_decrypt(owner_row.get("full_name")),
+                        owner_phone_number=safe_decrypt(owner_row.get("phone_number")),
+                        owner_address=owner_row.get("address"),
+                        vehicle_brand=vehicle_row.get("brand") if vehicle_row else None,
+                        vehicle_color=vehicle_row.get("color") if vehicle_row else None,
+                        vehicle_frame_number=vehicle_row.get("frame_number") if vehicle_row else None,
+                        vehicle_engine_number=vehicle_row.get("engine_number") if vehicle_row else None,
+                        vehicle_registration_date=vehicle_row.get("registration_date") if vehicle_row else None,
+                        vehicle_registration_expiry_date=vehicle_row.get("registration_expiry_date") if vehicle_row else None,
+                        vehicle_issuing_authority=vehicle_row.get("issuing_authority") if vehicle_row else None,
+                        vehicle_registration_status=vehicle_row.get("registration_status") if vehicle_row else None,
+                    ).model_dump()
+                )
+
+            return ViolationListResponse(items=items)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tải danh sách vi phạm: {exc}") from exc
+
     @router.get("/violation-penalties", response_model=ViolationPenaltyListResponse)
     async def list_violation_penalties() -> ViolationPenaltyListResponse:
         try:
             response = (
                 supabase_client.table(settings.violation_penalties_table)
-                .select("id, violation_code, violation_name, fine_amount, description, is_active, created_at, updated_at")
+                .select("id, violation_code, violation_name, fine_amount, description, is_active, vehicle_type, created_at, updated_at")
                 .order("updated_at", desc=True)
                 .execute()
             )
@@ -183,6 +346,7 @@ def build_app() -> FastAPI:
                         "fine_amount": payload.fine_amount,
                         "description": payload.description.strip() if payload.description else None,
                         "is_active": payload.is_active,
+                        "vehicle_type": payload.vehicle_type.strip() if payload.vehicle_type else None,
                     }
                 )
                 .execute()
@@ -206,6 +370,8 @@ def build_app() -> FastAPI:
             update_data["violation_name"] = update_data["violation_name"].strip()
         if "description" in update_data and isinstance(update_data.get("description"), str):
             update_data["description"] = update_data["description"].strip()
+        if "vehicle_type" in update_data and isinstance(update_data.get("vehicle_type"), str):
+            update_data["vehicle_type"] = update_data["vehicle_type"].strip()
 
         if not update_data:
             raise HTTPException(status_code=400, detail="Không có dữ liệu để cập nhật")

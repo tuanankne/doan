@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { NavLink } from "react-router-dom";
 import ViolationsTable from "../components/ViolationsTable";
 import { supabase } from "../../../shared/lib/supabaseClient";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const VIOLATIONS_ENDPOINT = `${normalizeApiBaseUrl(API_BASE_URL)}/api/v1/violations`;
 const VIOLATIONS_TABLE = import.meta.env.VITE_SUPABASE_VIOLATIONS_TABLE || "violations";
+
+function normalizeApiBaseUrl(baseUrl) {
+  const value = (baseUrl || "").trim().replace(/\/+$/, "");
+  return value.replace(/\/api\/v1$/, "");
+}
 
 function normalizeText(value) {
   return (value || "")
@@ -40,23 +48,19 @@ export default function DashboardPage() {
     setLoading(true);
     setError("");
 
-    const { data, error: violationsError } = await supabase
-      .from(VIOLATIONS_TABLE)
-      .select(
-        "id, vehicle_id, detected_license_plate, violation_code, violation_type, evidence_image_url, evidence_plate_url, detected_at, status, fine_amount_snapshot"
-      )
-      .order("detected_at", { ascending: false })
-      .limit(200);
-
-    if (violationsError) {
-      setError(violationsError.message);
+    try {
+      const response = await axios.get(VIOLATIONS_ENDPOINT, { timeout: 60 * 1000 });
+      setViolations(response.data?.items || []);
+    } catch (loadError) {
+      if (axios.isAxiosError(loadError)) {
+        setError(loadError.response?.data?.detail || loadError.message || "Không thể tải dữ liệu vi phạm.");
+      } else {
+        setError(loadError.message || "Không thể tải dữ liệu vi phạm.");
+      }
       setViolations([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setViolations(data || []);
-    setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -1,8 +1,10 @@
 ﻿from __future__ import annotations
 
+import logging
 import math
 import os
 import re
+import unicodedata
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -17,8 +19,13 @@ from storage3.exceptions import StorageApiError
 from supabase import Client, create_client
 from ultralytics import YOLO
 
+from app.core.encryption import decrypt_field
+
 Point = Tuple[float, float]
 BBox = Tuple[float, float, float, float]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -112,6 +119,13 @@ class VideoProcessor:
         self.recent_violations: Deque[Dict[str, Any]] = deque(maxlen=500)
         self._penalty_lookup_cache: Optional[Dict[str, Dict[str, Any]]] = None
         self._bucket_ready = False
+        self.vehicle_type_debug = os.getenv("VEHICLE_TYPE_DEBUG", "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._debug_last_vehicle_label: Dict[int, Tuple[Optional[int], str]] = {}
         self.vehicle_class_ids = self._infer_vehicle_class_ids(self.vehicle_model.names)
         self.plate_class_ids = self._infer_plate_class_ids()
         self.char_class_ids = self._infer_char_class_ids()
@@ -258,18 +272,36 @@ class VideoProcessor:
         if not canonical:
             return None
 
-        query = (
-            self.supabase.table("vehicles")
-            .select("id, license_plate")
-            .ilike("license_plate", f"%{canonical}%")
-            .limit(20)
-            .execute()
-        )
+        rows: List[Dict[str, Any]] = []
+        try:
+            query = (
+                self.supabase.table("vehicles")
+                .select("id, license_plate")
+                .ilike("license_plate", f"%{canonical}%")
+                .limit(50)
+                .execute()
+            )
+            rows = getattr(query, "data", None)
+            if rows is None and isinstance(query, dict):
+                rows = query.get("data", [])
+            rows = rows or []
+        except Exception:
+            rows = []
 
-        rows = getattr(query, "data", None)
-        if rows is None and isinstance(query, dict):
-            rows = query.get("data", [])
-        rows = rows or []
+        if not rows:
+            try:
+                query = (
+                    self.supabase.table("vehicles")
+                    .select("id, license_plate")
+                    .limit(1000)
+                    .execute()
+                )
+                rows = getattr(query, "data", None)
+                if rows is None and isinstance(query, dict):
+                    rows = query.get("data", [])
+                rows = rows or []
+            except Exception:
+                rows = []
 
         for row in rows:
             candidate = self._canonical_plate(str(row.get("license_plate", "")))
@@ -277,6 +309,126 @@ class VideoProcessor:
                 return row.get("id")
 
         return None
+
+    def _find_vehicle_context(self, plate_text: str) -> Dict[str, Any]:
+        canonical = self._canonical_plate(plate_text)
+        if not canonical:
+            return {}
+
+        rows: List[Dict[str, Any]] = []
+        for vehicle_select in (
+            "id, license_plate, citizen_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+            "id, license_plate, profile_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+        ):
+            try:
+                query = (
+                    self.supabase.table("vehicles")
+                    .select(vehicle_select)
+                    .ilike("license_plate", f"%{canonical}%")
+                    .limit(20)
+                    .execute()
+                )
+                result_rows = getattr(query, "data", None)
+                if result_rows is None and isinstance(query, dict):
+                    result_rows = query.get("data", [])
+                rows = result_rows or []
+                break
+            except Exception:
+                rows = []
+                continue
+
+        if not rows:
+            for vehicle_select in (
+                "id, license_plate, citizen_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+                "id, license_plate, profile_id, vehicle_type, brand, color, frame_number, engine_number, registration_date, registration_expiry_date, issuing_authority, registration_status",
+            ):
+                try:
+                    query = (
+                        self.supabase.table("vehicles")
+                        .select(vehicle_select)
+                        .limit(1000)
+                        .execute()
+                    )
+                    result_rows = getattr(query, "data", None)
+                    if result_rows is None and isinstance(query, dict):
+                        result_rows = query.get("data", [])
+                    rows = result_rows or []
+                    break
+                except Exception:
+                    rows = []
+                    continue
+
+        vehicle_row: Dict[str, Any] = {}
+        for row in rows:
+            candidate = self._canonical_plate(str(row.get("license_plate", "")))
+            if candidate == canonical:
+                vehicle_row = row
+                break
+
+        if not vehicle_row:
+            return {}
+
+        citizen_id = str(vehicle_row.get("citizen_id") or "").strip()
+        profile_id = str(vehicle_row.get("profile_id") or "").strip()
+        profile_row: Dict[str, Any] = {}
+        if citizen_id:
+            try:
+                profile_response = (
+                    self.supabase.table("profiles")
+                    .select("citizen_id, full_name, phone_number, address")
+                    .eq("citizen_id", citizen_id)
+                    .limit(1)
+                    .execute()
+                )
+                profile_rows = getattr(profile_response, "data", None)
+                if profile_rows is None and isinstance(profile_response, dict):
+                    profile_rows = profile_response.get("data", [])
+                profile_row = (profile_rows or [{}])[0] or {}
+            except Exception:
+                profile_row = {}
+        elif profile_id:
+            try:
+                profile_response = (
+                    self.supabase.table("profiles")
+                    .select("id, citizen_id, full_name, phone_number, address")
+                    .eq("id", profile_id)
+                    .limit(1)
+                    .execute()
+                )
+                profile_rows = getattr(profile_response, "data", None)
+                if profile_rows is None and isinstance(profile_response, dict):
+                    profile_rows = profile_response.get("data", [])
+                profile_row = (profile_rows or [{}])[0] or {}
+                citizen_id = str(profile_row.get("citizen_id") or "").strip()
+            except Exception:
+                profile_row = {}
+
+        def safe_decrypt(value: Any) -> str:
+            text = str(value or "").strip()
+            if not text:
+                return ""
+            try:
+                return decrypt_field(text)
+            except Exception:
+                return text
+
+        return {
+            "vehicle_id": vehicle_row.get("id"),
+            "vehicle_license_plate": vehicle_row.get("license_plate"),
+            "vehicle_type_db": vehicle_row.get("vehicle_type"),
+            "vehicle_brand": vehicle_row.get("brand"),
+            "vehicle_color": vehicle_row.get("color"),
+            "vehicle_frame_number": vehicle_row.get("frame_number"),
+            "vehicle_engine_number": vehicle_row.get("engine_number"),
+            "vehicle_registration_date": vehicle_row.get("registration_date"),
+            "vehicle_registration_expiry_date": vehicle_row.get("registration_expiry_date"),
+            "vehicle_issuing_authority": vehicle_row.get("issuing_authority"),
+            "vehicle_registration_status": vehicle_row.get("registration_status"),
+            "owner_citizen_id": profile_row.get("citizen_id") or citizen_id,
+            "owner_full_name": safe_decrypt(profile_row.get("full_name")),
+            "owner_phone_number": safe_decrypt(profile_row.get("phone_number")),
+            "owner_address": profile_row.get("address") or "",
+        }
 
     def _infer_vehicle_class_ids(self, names: Any) -> List[int]:
         target_names = {
@@ -330,14 +482,27 @@ class VideoProcessor:
     @staticmethod
     def _normalize_vehicle_type_label(label: str) -> str:
         text = str(label or "").strip().lower()
+        normalized_text = (
+            unicodedata.normalize("NFD", text)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        normalized_text = normalized_text.replace("-", " ").replace("_", " ")
+
+        if "xe gan may" in normalized_text or "xe may" in normalized_text:
+            return "Xe gắn máy"
+        if "xe oto" in normalized_text or "xe o to" in normalized_text:
+            return "Xe ô tô"
+
         if any(keyword in text for keyword in ("motorcycle", "motorbike", "scooter", "moped", "xe gan may", "xe_gan_may")):
             return "Xe gắn máy"
 
         if any(keyword in text for keyword in ("bicycle", "bike", "cycl", "pushbike", "xe tho so", "xe_tho_so")):
-            return "Xe thô sơ"
+            # Dự án hiện chỉ dùng 2 loại: xe máy và ô tô.
+            return "Xe gắn máy"
 
         if any(
-            keyword in text
+            keyword in text or keyword in normalized_text
             for keyword in (
                 "car",
                 "sedan",
@@ -350,6 +515,7 @@ class VideoProcessor:
                 "vehicle",
                 "xe oto",
                 "xe_o_to",
+                "xe o to",
             )
         ):
             return "Xe ô tô"
@@ -357,11 +523,34 @@ class VideoProcessor:
         if not text:
             return "Xe ô tô"
 
-        return "Xe thô sơ"
+        return "Xe ô tô"
+
+    @staticmethod
+    def _normalize_penalty_vehicle_type(label: str) -> str:
+        text = str(label or "").strip().lower()
+        normalized_text = (
+            unicodedata.normalize("NFD", text)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        normalized_text = normalized_text.replace("-", " ").replace("_", " ")
+
+        if "xe gan may" in normalized_text or "xe may" in normalized_text:
+            return "Xe gắn máy"
+        if "xe o to" in normalized_text or "xe oto" in normalized_text:
+            return "Xe ô tô"
+        return ""
 
     def _vehicle_type_from_class_id(self, class_id: Optional[int]) -> str:
         if class_id is None or class_id < 0:
             return "Không xác định"
+
+        # Ưu tiên map theo class id chuẩn COCO để tránh lệch tên class từ model.
+        # 1=bicycle, 3=motorcycle, 2=car, 5=bus, 7=truck
+        if class_id in (1, 3):
+            return "Xe gắn máy"
+        if class_id in (2, 5, 7):
+            return "Xe ô tô"
 
         class_name = self._vehicle_class_name(class_id)
         return self._normalize_vehicle_type_label(class_name)
@@ -589,7 +778,7 @@ class VideoProcessor:
         try:
             response = (
                 self.supabase.table(self.violation_penalties_table)
-                .select("violation_code, violation_name, fine_amount, is_active")
+                .select("violation_code, violation_name, fine_amount, is_active, vehicle_type")
                 .execute()
             )
             rows = self._extract_rows(response)
@@ -597,7 +786,13 @@ class VideoProcessor:
                 code = self._normalize_violation_code(str(row.get("violation_code", "")))
                 if not code:
                     continue
-                lookup[code] = row
+                raw_vehicle_type = str(row.get("vehicle_type") or "").strip()
+                if raw_vehicle_type:
+                    vehicle_type = self._normalize_penalty_vehicle_type(raw_vehicle_type)
+                    if vehicle_type:
+                        lookup[f"{code}::{vehicle_type}"] = row
+                else:
+                    lookup[code] = row
         except Exception:
             # Fallback to default mapping if violation_penalties table is unavailable.
             lookup = {}
@@ -620,9 +815,11 @@ class VideoProcessor:
         self,
         violation_type: str,
         violation_code: Optional[str] = None,
+        vehicle_type: Optional[str] = None,
     ) -> Tuple[str, str, Optional[int]]:
         code = self._normalize_violation_code(violation_code or "")
         normalized_type = self._normalize_violation_code(violation_type)
+        normalized_vehicle_type = self._normalize_vehicle_type_label(str(vehicle_type or ""))
 
         if not code:
             if normalized_type in {"VUOT_DEN_DO", "VƯỢT_ĐÈN_ĐỎ", "RED_LIGHT"}:
@@ -636,7 +833,20 @@ class VideoProcessor:
 
         display = self._default_violation_name(violation_type, code)
         fine_amount_snapshot: Optional[int] = None
-        penalty = self._load_penalty_lookup().get(code)
+        penalty_lookup = self._load_penalty_lookup()
+        penalty = None
+        if normalized_vehicle_type in {"Xe ô tô", "Xe gắn máy"}:
+            penalty = penalty_lookup.get(f"{code}::{normalized_vehicle_type}")
+        else:
+            penalty = penalty_lookup.get(code)
+
+        if penalty is None and self.vehicle_type_debug:
+            logger.warning(
+                "[penalty-lookup-debug] no penalty match for code='%s' vehicle_type='%s'",
+                code,
+                normalized_vehicle_type,
+            )
+
         if penalty:
             mapped_name = str(penalty.get("violation_name", "")).strip()
             if mapped_name:
@@ -1092,6 +1302,7 @@ class VideoProcessor:
         plate_text: str,
         vehicle_type: str,
         event_time: datetime,
+        owner_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         annotated_frame = frame.copy()
         self._draw_bbox(annotated_frame, vehicle_bbox, (0, 0, 255), "vehicle")
@@ -1126,6 +1337,18 @@ class VideoProcessor:
         record = {
             "detected_license_plate": plate_text or "UNKNOWN",
             "vehicle_type": vehicle_type or "Không xác định",
+            "owner_citizen_id": (owner_context or {}).get("owner_citizen_id", ""),
+            "owner_full_name": (owner_context or {}).get("owner_full_name", ""),
+            "owner_phone_number": (owner_context or {}).get("owner_phone_number", ""),
+            "owner_address": (owner_context or {}).get("owner_address", ""),
+            "vehicle_brand": (owner_context or {}).get("vehicle_brand"),
+            "vehicle_color": (owner_context or {}).get("vehicle_color"),
+            "vehicle_frame_number": (owner_context or {}).get("vehicle_frame_number"),
+            "vehicle_engine_number": (owner_context or {}).get("vehicle_engine_number"),
+            "vehicle_registration_date": (owner_context or {}).get("vehicle_registration_date"),
+            "vehicle_registration_expiry_date": (owner_context or {}).get("vehicle_registration_expiry_date"),
+            "vehicle_issuing_authority": (owner_context or {}).get("vehicle_issuing_authority"),
+            "vehicle_registration_status": (owner_context or {}).get("vehicle_registration_status"),
             "violation_code": violation_code,
             "violation_type": violation_type,
             "evidence_image_url": scene_url,
@@ -1139,12 +1362,16 @@ class VideoProcessor:
         inserted = 0
         for item in violations:
             plate_text = self._sanitize_plate_text(str(item.get("detected_license_plate", "")))
-            vehicle_type = self._normalize_vehicle_type_label(str(item.get("vehicle_type", "")))
+            raw_vehicle_type = str(item.get("vehicle_type", "")).strip()
+            vehicle_type = raw_vehicle_type if raw_vehicle_type in {"Xe gắn máy", "Xe ô tô"} else self._normalize_vehicle_type_label(raw_vehicle_type)
+            if not raw_vehicle_type:
+                vehicle_type = "Không xác định"
             raw_violation_type = str(item.get("violation_type", "")).strip()
             raw_violation_code = str(item.get("violation_code", "")).strip()
             violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
                 raw_violation_type,
                 raw_violation_code,
+                vehicle_type,
             )
             evidence_image_url = str(item.get("evidence_image_url", "")).strip()
             evidence_plate_url = str(item.get("evidence_plate_url", "")).strip()
@@ -1162,6 +1389,10 @@ class VideoProcessor:
                 "vehicle_id": vehicle_id,
                 "detected_license_plate": plate_text or "UNKNOWN",
                 "vehicle_type": vehicle_type,
+                "owner_citizen_id": str(item.get("owner_citizen_id", "")).strip() or None,
+                "owner_full_name": str(item.get("owner_full_name", "")).strip() or None,
+                "owner_phone_number": str(item.get("owner_phone_number", "")).strip() or None,
+                "owner_address": str(item.get("owner_address", "")).strip() or None,
                 "violation_code": violation_code,
                 "violation_type": violation_type,
                 "fine_amount_snapshot": fine_amount_snapshot,
@@ -1171,13 +1402,40 @@ class VideoProcessor:
                 "status": "pending",
             }
 
+            insert_record = {
+                key: value
+                for key, value in record.items()
+                if key
+                in {
+                    "vehicle_id",
+                    "detected_license_plate",
+                    "vehicle_type",
+                    "violation_code",
+                    "violation_type",
+                    "fine_amount_snapshot",
+                    "evidence_image_url",
+                    "evidence_plate_url",
+                    "detected_at",
+                    "status",
+                }
+            }
+
+            if self.vehicle_type_debug:
+                logger.warning(
+                    "[vehicle-type-save-debug] plate=%s raw='%s' stored='%s' violation='%s'",
+                    plate_text or "UNKNOWN",
+                    raw_vehicle_type,
+                    vehicle_type,
+                    violation_type,
+                )
+
             try:
-                self.supabase.table(self.violations_table).insert(record).execute()
+                self.supabase.table(self.violations_table).insert(insert_record).execute()
             except Exception:
                 # Backward compatibility for old schema where violations has no violation_code column.
                 fallback_record = {
                     k: v
-                    for k, v in record.items()
+                    for k, v in insert_record.items()
                     if k not in {"violation_code", "fine_amount_snapshot"}
                 }
                 self.supabase.table(self.violations_table).insert(fallback_record).execute()
@@ -1259,6 +1517,19 @@ class VideoProcessor:
                     )
                     vehicle_class_id = int(track_classes[i]) if i < len(track_classes) else None
                     vehicle_type = self._vehicle_type_from_class_id(vehicle_class_id)
+                    if self.vehicle_type_debug:
+                        class_name = self._vehicle_class_name(vehicle_class_id) if vehicle_class_id is not None else ""
+                        current_label = (vehicle_class_id, vehicle_type)
+                        if self._debug_last_vehicle_label.get(track_id) != current_label:
+                            logger.warning(
+                                "[vehicle-type-debug] frame=%s track=%s class_id=%s class_name='%s' mapped='%s'",
+                                frame_idx,
+                                track_id,
+                                vehicle_class_id,
+                                class_name,
+                                vehicle_type,
+                            )
+                            self._debug_last_vehicle_label[track_id] = current_label
 
                     center = self._bbox_center(bbox)
                     plate_bbox = self._find_plate_bbox_for_vehicle(bbox, plate_xyxy, plate_classes, plate_confs)
@@ -1283,9 +1554,11 @@ class VideoProcessor:
                             key = (track_id, "red_light")
                             last_frame = self.last_violation_frame.get(key, -10**9)
                             if frame_idx - last_frame >= cooldown_frames:
+                                owner_context = self._find_vehicle_context(plate_text)
                                 violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
                                     "Vượt đèn đỏ",
                                     "VUOT_DEN_DO",
+                                    vehicle_type,
                                 )
                                 if self._is_duplicate_violation(
                                     track_id=track_id,
@@ -1306,6 +1579,7 @@ class VideoProcessor:
                                     plate_text=plate_text,
                                     vehicle_type=vehicle_type,
                                     event_time=current_time,
+                                    owner_context=owner_context,
                                 )
                                 record["fine_amount_snapshot"] = fine_amount_snapshot
                                 violations.append(record)
@@ -1324,9 +1598,11 @@ class VideoProcessor:
                             key = (track_id, "no_helmet")
                             last_frame = self.last_violation_frame.get(key, -10**9)
                             if frame_idx - last_frame >= cooldown_frames:
+                                owner_context = self._find_vehicle_context(plate_text)
                                 violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
                                     "Không đội mũ bảo hiểm",
                                     "KHONG_DOI_MU_BAO_HIEM",
+                                    vehicle_type,
                                 )
                                 if self._is_duplicate_violation(
                                     track_id=track_id,
@@ -1347,6 +1623,7 @@ class VideoProcessor:
                                     plate_text=plate_text,
                                     vehicle_type=vehicle_type,
                                     event_time=current_time,
+                                    owner_context=owner_context,
                                 )
                                 record["fine_amount_snapshot"] = fine_amount_snapshot
                                 violations.append(record)
@@ -1369,9 +1646,11 @@ class VideoProcessor:
                                 key = (track_id, "wrong_way")
                                 last_frame = self.last_violation_frame.get(key, -10**9)
                                 if frame_idx - last_frame >= cooldown_frames:
+                                    owner_context = self._find_vehicle_context(plate_text)
                                     violation_code, violation_type, fine_amount_snapshot = self._violation_meta(
                                         "Ngược chiều",
                                         "NGUOC_CHIEU",
+                                        vehicle_type,
                                     )
                                     if self._is_duplicate_violation(
                                         track_id=track_id,
@@ -1392,6 +1671,7 @@ class VideoProcessor:
                                         plate_text=plate_text,
                                         vehicle_type=vehicle_type,
                                         event_time=current_time,
+                                        owner_context=owner_context,
                                     )
                                     record["fine_amount_snapshot"] = fine_amount_snapshot
                                     violations.append(record)

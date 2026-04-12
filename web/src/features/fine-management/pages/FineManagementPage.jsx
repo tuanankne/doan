@@ -4,6 +4,7 @@ import axios from "axios";
 const emptyForm = {
   violation_code: "",
   violation_name: "",
+  vehicle_type: "",
   fine_amount: "",
   description: "",
   is_active: true,
@@ -17,8 +18,13 @@ function formatMoney(value) {
   return `${amount.toLocaleString("vi-VN")} ₫`;
 }
 
+function normalizeApiBaseUrl(baseUrl) {
+  const value = (baseUrl || "").trim().replace(/\/+$/, "");
+  return value.replace(/\/api\/v1$/, "");
+}
+
 export default function FineManagementPage() {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+  const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1");
   const requestTimeout = 60000;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +42,7 @@ export default function FineManagementPage() {
     setError("");
 
     try {
-      const response = await axios.get(`${apiBaseUrl}/violation-penalties`, { timeout: requestTimeout });
+      const response = await axios.get(`${apiBaseUrl}/api/v1/violation-penalties`, { timeout: requestTimeout });
       setItems(response.data?.items || []);
     } catch (requestError) {
       const msg = axios.isAxiosError(requestError)
@@ -65,6 +71,7 @@ export default function FineManagementPage() {
     setForm({
       violation_code: item.violation_code || "",
       violation_name: item.violation_name || "",
+      vehicle_type: item.vehicle_type || "",
       fine_amount: String(item.fine_amount ?? ""),
       description: item.description || "",
       is_active: Boolean(item.is_active),
@@ -82,6 +89,7 @@ export default function FineManagementPage() {
     const payload = {
       violation_code: form.violation_code.trim(),
       violation_name: form.violation_name.trim(),
+      vehicle_type: form.vehicle_type || null,
       fine_amount: Number(form.fine_amount),
       description: form.description.trim(),
       is_active: form.is_active,
@@ -95,10 +103,10 @@ export default function FineManagementPage() {
 
     try {
       if (isEditing) {
-        await axios.put(`${apiBaseUrl}/violation-penalties/${editingId}`, payload, { timeout: requestTimeout });
+        await axios.put(`${apiBaseUrl}/api/v1/violation-penalties/${editingId}`, payload, { timeout: requestTimeout });
         setSuccess("Đã cập nhật mức phạt.");
       } else {
-        await axios.post(`${apiBaseUrl}/violation-penalties`, payload, { timeout: requestTimeout });
+        await axios.post(`${apiBaseUrl}/api/v1/violation-penalties`, payload, { timeout: requestTimeout });
         setSuccess("Đã thêm mức phạt mới.");
       }
 
@@ -126,7 +134,7 @@ export default function FineManagementPage() {
     setSuccess("");
 
     try {
-      await axios.delete(`${apiBaseUrl}/violation-penalties/${item.id}`, { timeout: requestTimeout });
+      await axios.delete(`${apiBaseUrl}/api/v1/violation-penalties/${item.id}`, { timeout: requestTimeout });
       setSuccess("Đã xóa mức phạt.");
       if (editingId === item.id) {
         resetForm();
@@ -182,6 +190,19 @@ export default function FineManagementPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, violation_name: event.target.value }))}
                 placeholder="VD: Vượt đèn đỏ"
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="vehicle-type">Loại xe áp dụng</label>
+              <select
+                id="vehicle-type"
+                value={form.vehicle_type}
+                onChange={(event) => setForm((prev) => ({ ...prev, vehicle_type: event.target.value }))}
+              >
+                <option value="">Tất cả loại xe</option>
+                <option value="Xe gắn máy">Xe gắn máy</option>
+                <option value="Xe ô tô">Xe ô tô</option>
+              </select>
             </div>
 
             <div className="field">
@@ -250,6 +271,7 @@ export default function FineManagementPage() {
               <tr>
                 <th>Mã lỗi</th>
                 <th>Tên lỗi</th>
+                <th>Loại xe áp dụng</th>
                 <th>Mức phạt</th>
                 <th>Trạng thái</th>
                 <th>Mô tả</th>
@@ -259,7 +281,7 @@ export default function FineManagementPage() {
             <tbody>
               {items.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="empty-note">
+                  <td colSpan={7} className="empty-note">
                     Chưa có dữ liệu mức phạt.
                   </td>
                 </tr>
@@ -269,6 +291,7 @@ export default function FineManagementPage() {
                 <tr key={item.id}>
                   <td>{item.violation_code}</td>
                   <td>{item.violation_name}</td>
+                  <td>{item.vehicle_type || "Tất cả"}</td>
                   <td>{formatMoney(item.fine_amount)}</td>
                   <td>
                     <span className={`status-badge ${item.is_active ? "status-done" : "status-other"}`}>
