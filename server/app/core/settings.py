@@ -15,6 +15,7 @@ class AppSettings:
     violations_table: str
     violation_penalties_table: str
     model_path: str
+    encryption_key: str
 
 
 def _resolve_model_path(server_root: Path, raw_model_path: str) -> str:
@@ -55,6 +56,10 @@ def load_settings() -> AppSettings:
     raw_model_path = os.getenv("YOLO_MODEL_PATH", "models/ver2.pt").strip()
     model_path = _resolve_model_path(server_root, raw_model_path)
 
+    encryption_key = os.getenv("ENCRYPTION_KEY", "default_unsafe_key_change_in_production").strip()
+    if encryption_key == "default_unsafe_key_change_in_production":
+        print("WARNING: Using default ENCRYPTION_KEY. Set ENCRYPTION_KEY in .env for production.")
+
     return AppSettings(
         supabase_url=supabase_url,
         supabase_key=supabase_key,
@@ -62,4 +67,5 @@ def load_settings() -> AppSettings:
         violations_table=violations_table,
         violation_penalties_table=violation_penalties_table,
         model_path=model_path,
+        encryption_key=encryption_key,
     )

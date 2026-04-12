@@ -17,7 +17,9 @@ function formatMoney(value) {
   return `${amount.toLocaleString("vi-VN")} ₫`;
 }
 
-export default function FineManagementPage({ apiBaseUrl = "http://localhost:8000" }) {
+export default function FineManagementPage() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+  const requestTimeout = 60000;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -34,14 +36,14 @@ export default function FineManagementPage({ apiBaseUrl = "http://localhost:8000
     setError("");
 
     try {
-      const response = await axios.get(`${apiBaseUrl}/api/v1/violation-penalties`, { timeout: 30000 });
+      const response = await axios.get(`${apiBaseUrl}/violation-penalties`, { timeout: requestTimeout });
       setItems(response.data?.items || []);
     } catch (requestError) {
-      setError(
-        axios.isAxiosError(requestError)
-          ? requestError.response?.data?.detail || requestError.message || "Không thể tải danh sách mức phạt."
-          : "Không thể tải danh sách mức phạt."
-      );
+      const msg = axios.isAxiosError(requestError)
+        ? requestError.response?.data?.detail || requestError.message || "Không thể tải danh sách mức phạt."
+        : "Không thể tải danh sách mức phạt.";
+      setError(msg);
+      console.error("Load violation-penalties error:", msg, requestError);
     } finally {
       setLoading(false);
     }
@@ -93,10 +95,10 @@ export default function FineManagementPage({ apiBaseUrl = "http://localhost:8000
 
     try {
       if (isEditing) {
-        await axios.put(`${apiBaseUrl}/api/v1/violation-penalties/${editingId}`, payload, { timeout: 30000 });
+        await axios.put(`${apiBaseUrl}/violation-penalties/${editingId}`, payload, { timeout: requestTimeout });
         setSuccess("Đã cập nhật mức phạt.");
       } else {
-        await axios.post(`${apiBaseUrl}/api/v1/violation-penalties`, payload, { timeout: 30000 });
+        await axios.post(`${apiBaseUrl}/violation-penalties`, payload, { timeout: requestTimeout });
         setSuccess("Đã thêm mức phạt mới.");
       }
 
@@ -124,7 +126,7 @@ export default function FineManagementPage({ apiBaseUrl = "http://localhost:8000
     setSuccess("");
 
     try {
-      await axios.delete(`${apiBaseUrl}/api/v1/violation-penalties/${item.id}`, { timeout: 30000 });
+      await axios.delete(`${apiBaseUrl}/violation-penalties/${item.id}`, { timeout: requestTimeout });
       setSuccess("Đã xóa mức phạt.");
       if (editingId === item.id) {
         resetForm();

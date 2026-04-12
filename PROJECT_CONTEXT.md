@@ -165,7 +165,7 @@ npm run dev
 ```bash
 cd server
 pip install fastapi uvicorn python-multipart python-dotenv supabase ultralytics opencv-python easyocr numpy
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## 8) Ghi chú kỹ thuật quan trọng cho AI phiên sau

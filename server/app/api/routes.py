@@ -12,6 +12,8 @@ from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import Client, create_client
 
+from app.api.management_routes import create_management_router
+from app.core.encryption import init_encryption
 from app.core.settings import load_settings
 from app.schemas.api_models import (
     ConfirmViolationsRequest,
@@ -243,4 +245,12 @@ def build_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Không thể xóa mức phạt: {exc}") from exc
 
     app.include_router(router)
+    
+    # Initialize encryption service
+    init_encryption(settings.encryption_key)
+    
+    # Add management routes
+    management_router = create_management_router(supabase_client)
+    app.include_router(management_router, prefix="/api/v1")
+    
     return app

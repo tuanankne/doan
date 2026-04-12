@@ -41,15 +41,16 @@ CREATE TABLE public.driver_licenses (
   CONSTRAINT driver_licenses_citizen_id_fkey FOREIGN KEY (citizen_id) REFERENCES public.profiles(citizen_id)
 );
 CREATE TABLE public.profiles (
-  id uuid NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
   full_name character varying,
   citizen_id character varying UNIQUE,
   phone_number character varying UNIQUE,
   address text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  date_of_birth date,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
-  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+  -- No FK to auth.users: profile records are managed independently in this app
 );
 CREATE TABLE public.vehicles (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -59,7 +60,6 @@ CREATE TABLE public.vehicles (
   color character varying,
   registered_at timestamp with time zone DEFAULT now(),
   citizen_id character varying NOT NULL,
-  registration_number character varying UNIQUE,
   frame_number character varying,
   engine_number character varying,
   registration_date date,

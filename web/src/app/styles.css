@@ -167,6 +167,44 @@ a {
   padding: 16px;
 }
 
+.admin-shortcuts {
+  margin-bottom: 14px;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.shortcut-card {
+  display: block;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: linear-gradient(160deg, #ffffff 0%, #f5fff7 100%);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.shortcut-card:hover {
+  transform: translateY(-2px);
+  border-color: #8bc89b;
+  box-shadow: var(--shadow-sm);
+}
+
+.shortcut-title {
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.shortcut-desc {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;
