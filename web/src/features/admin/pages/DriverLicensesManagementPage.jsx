@@ -24,10 +24,15 @@ const DriverLicensesManagementPage = () => {
     points: 12,
     status: "Hoạt động",
   });
+  const [searchCitizendId, setSearchCitizendId] = useState("");
 
   useEffect(() => {
     loadDriverLicenses();
   }, []);
+
+  const filteredLicenses = licenses.filter((license) =>
+    license.citizen_id.toLowerCase().includes(searchCitizendId.toLowerCase())
+  );
 
   const loadDriverLicenses = async () => {
     setLoading(true);
@@ -108,6 +113,9 @@ const DriverLicensesManagementPage = () => {
         const updateData = {};
         const original = licenses.find((l) => l.id === editingId);
         Object.keys(formData).forEach((key) => {
+          if (key === "citizen_id") {
+            return;
+          }
           if (formData[key] !== (original[key] || "")) {
             updateData[key] = formData[key];
           }
@@ -146,6 +154,22 @@ const DriverLicensesManagementPage = () => {
         </button>
       </div>
 
+      <div style={{ marginBottom: 16, background: "white", padding: 12, borderRadius: 8 }}>
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo CCCD..."
+          value={searchCitizendId}
+          onChange={(e) => setSearchCitizendId(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            fontSize: 14,
+          }}
+        />
+      </div>
+
       {loading ? (
         <div className="loading">Đang tải...</div>
       ) : (
@@ -164,7 +188,7 @@ const DriverLicensesManagementPage = () => {
               </tr>
             </thead>
             <tbody>
-              {licenses.map((license) => (
+              {filteredLicenses.map((license) => (
                 <tr key={license.id}>
                   <td>{license.citizen_id}</td>
                   <td>{license.license_number}</td>

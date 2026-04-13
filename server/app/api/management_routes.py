@@ -30,16 +30,47 @@ from app.schemas.api_models import (
 )
 
 
+def _safe_decrypt(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return decrypt_field(text)
+    except Exception:
+        return text
+
+
+def _decode_citizen_id(value: str) -> str:
+    return _safe_decrypt(value)
+
+
 def _get_profile_by_citizen_id(supabase_client: Client, citizen_id: str):
-    response = (
-        supabase_client.table("profiles")
-        .select("id, citizen_id")
-        .eq("citizen_id", citizen_id)
-        .limit(1)
-        .execute()
-    )
+    normalized = str(citizen_id or "").strip()
+    if not normalized:
+        return None
+
+    # Legacy compatibility: old rows may still store citizen_id in plaintext.
+    try:
+        response = (
+            supabase_client.table("profiles")
+            .select("id, citizen_id")
+            .eq("citizen_id", normalized)
+            .limit(1)
+            .execute()
+        )
+        items = getattr(response, "data", None) or []
+        if items:
+            return items[0]
+    except Exception:
+        pass
+
+    # Current format uses encrypted citizen_id, so compare by decrypting rows.
+    response = supabase_client.table("profiles").select("id, citizen_id").execute()
     items = getattr(response, "data", None) or []
-    return items[0] if items else None
+    for item in items:
+        if _decode_citizen_id(item.get("citizen_id")) == normalized:
+            return item
+    return None
 
 
 def _get_profile_by_id(supabase_client: Client, profile_id: str):
@@ -82,8 +113,8 @@ def create_management_router(supabase_client: Client) -> APIRouter:
             for row in response.data:
                 profile = ProfileResponseWithRelations(
                     id=row["id"],
-                    full_name=decrypt_field(row["full_name"]) if row.get("full_name") else "",
-                    citizen_id=row.get("citizen_id") or "",
+                    full_name=_safe_decrypt(row.get("full_name")),
+                    citizen_id=_decode_citizen_id(row.get("citizen_id")),
                     phone_number=decrypt_field(row["phone_number"]) if row.get("phone_number") else "",
                     address=row.get("address"),
                     date_of_birth=row.get("date_of_birth"),
@@ -128,16 +159,14 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         """Create a new profile with encrypted sensitive fields."""
         try:
             # Check if citizen_id already exists
-            existing = supabase_client.table("profiles").select("id").eq(
-                "citizen_id", request.citizen_id
-            ).execute()
-            if existing.data:
+            existing = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if existing:
                 raise HTTPException(status_code=400, detail="Citizen ID already exists")
 
             encrypted_data = {
                 "id": str(uuid.uuid4()),
-                "full_name": encrypt_field(request.full_name),
-                "citizen_id": request.citizen_id,
+                "full_name": request.full_name,
+                "citizen_id": encrypt_field(request.citizen_id),
                 "phone_number": encrypt_field(request.phone_number),
                 "address": request.address,
                 "date_of_birth": request.date_of_birth,
@@ -148,8 +177,8 @@ def create_management_router(supabase_client: Client) -> APIRouter:
 
             return ProfileResponse(
                 id=row["id"],
-                full_name=decrypt_field(row["full_name"]),
-                citizen_id=row.get("citizen_id") or "",
+                full_name=_safe_decrypt(row.get("full_name")),
+                citizen_id=_decode_citizen_id(row.get("citizen_id")),
                 phone_number=decrypt_field(row["phone_number"]),
                 address=row.get("address"),
                 date_of_birth=row.get("date_of_birth"),
@@ -167,7 +196,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         try:
             encrypted_data = {}
             if request.full_name:
-                encrypted_data["full_name"] = encrypt_field(request.full_name)
+                encrypted_data["full_name"] = request.full_name
             if request.phone_number:
                 encrypted_data["phone_number"] = encrypt_field(request.phone_number)
             if request.address is not None:
@@ -185,8 +214,8 @@ def create_management_router(supabase_client: Client) -> APIRouter:
             row = response.data[0]
             return ProfileResponse(
                 id=row["id"],
-                full_name=decrypt_field(row["full_name"]),
-                citizen_id=row.get("citizen_id") or "",
+                full_name=_safe_decrypt(row.get("full_name")),
+                citizen_id=_decode_citizen_id(row.get("citizen_id")),
                 phone_number=decrypt_field(row["phone_number"]),
                 address=row.get("address"),
                 date_of_birth=row.get("date_of_birth"),
@@ -219,7 +248,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
                 profile = _get_profile_by_id(supabase_client, row["profile_id"])
                 license_obj = DriverLicenseResponse(
                     id=row["id"],
-                    citizen_id=profile["citizen_id"] if profile else "",
+                    citizen_id=_decode_citizen_id(profile.get("citizen_id")) if profile else "",
                     license_number=decrypt_field(row["license_number"]) if row.get("license_number") else "",
                     license_class=row.get("license_class", ""),
                     issued_date=row.get("issued_date"),
@@ -310,7 +339,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
             profile = _get_profile_by_id(supabase_client, row["profile_id"])
             return DriverLicenseResponse(
                 id=row["id"],
-                citizen_id=profile["citizen_id"] if profile else "",
+                citizen_id=_decode_citizen_id(profile.get("citizen_id")) if profile else "",
                 license_number=decrypt_field(row["license_number"]),
                 license_class=row.get("license_class", ""),
                 issued_date=row.get("issued_date"),
@@ -347,7 +376,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
                 profile = _get_profile_by_id(supabase_client, row["profile_id"])
                 vehicle = VehicleResponse(
                     id=row["id"],
-                    citizen_id=profile["citizen_id"] if profile else "",
+                    citizen_id=_decode_citizen_id(profile.get("citizen_id")) if profile else "",
                     license_plate=row.get("license_plate", ""),
                     vehicle_type=row.get("vehicle_type"),
                     brand=row.get("brand"),
@@ -417,6 +446,11 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         """Update a vehicle."""
         try:
             vehicle_data = {}
+            if request.citizen_id:
+                profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+                if not profile:
+                    raise HTTPException(status_code=400, detail="Citizen not found in profiles")
+                vehicle_data["profile_id"] = profile["id"]
             if request.license_plate:
                 vehicle_data["license_plate"] = request.license_plate
             if request.vehicle_type is not None:
@@ -449,7 +483,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
             profile = _get_profile_by_id(supabase_client, row["profile_id"])
             return VehicleResponse(
                 id=row["id"],
-                citizen_id=profile["citizen_id"] if profile else "",
+                citizen_id=_decode_citizen_id(profile.get("citizen_id")) if profile else "",
                 license_plate=row.get("license_plate", ""),
                 vehicle_type=row.get("vehicle_type"),
                 brand=row.get("brand"),

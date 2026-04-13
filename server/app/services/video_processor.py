@@ -368,10 +368,20 @@ class VideoProcessor:
         if not vehicle_row:
             return {}
 
+        def safe_decrypt(value: Any) -> str:
+            text = str(value or "").strip()
+            if not text:
+                return ""
+            try:
+                return decrypt_field(text)
+            except Exception:
+                return text
+
         citizen_id = str(vehicle_row.get("citizen_id") or "").strip()
         profile_id = str(vehicle_row.get("profile_id") or "").strip()
         profile_row: Dict[str, Any] = {}
         if citizen_id:
+            normalized_citizen_id = safe_decrypt(citizen_id)
             try:
                 profile_response = (
                     self.supabase.table("profiles")
@@ -384,6 +394,19 @@ class VideoProcessor:
                 if profile_rows is None and isinstance(profile_response, dict):
                     profile_rows = profile_response.get("data", [])
                 profile_row = (profile_rows or [{}])[0] or {}
+                if not profile_row:
+                    scan_response = (
+                        self.supabase.table("profiles")
+                        .select("citizen_id, full_name, phone_number, address")
+                        .execute()
+                    )
+                    scan_rows = getattr(scan_response, "data", None)
+                    if scan_rows is None and isinstance(scan_response, dict):
+                        scan_rows = scan_response.get("data", [])
+                    for candidate in (scan_rows or []):
+                        if safe_decrypt(candidate.get("citizen_id")) == normalized_citizen_id:
+                            profile_row = candidate
+                            break
             except Exception:
                 profile_row = {}
         elif profile_id:
@@ -403,15 +426,6 @@ class VideoProcessor:
             except Exception:
                 profile_row = {}
 
-        def safe_decrypt(value: Any) -> str:
-            text = str(value or "").strip()
-            if not text:
-                return ""
-            try:
-                return decrypt_field(text)
-            except Exception:
-                return text
-
         return {
             "vehicle_id": vehicle_row.get("id"),
             "vehicle_license_plate": vehicle_row.get("license_plate"),
@@ -424,7 +438,7 @@ class VideoProcessor:
             "vehicle_registration_expiry_date": vehicle_row.get("registration_expiry_date"),
             "vehicle_issuing_authority": vehicle_row.get("issuing_authority"),
             "vehicle_registration_status": vehicle_row.get("registration_status"),
-            "owner_citizen_id": profile_row.get("citizen_id") or citizen_id,
+            "owner_citizen_id": safe_decrypt(profile_row.get("citizen_id") or citizen_id),
             "owner_full_name": safe_decrypt(profile_row.get("full_name")),
             "owner_phone_number": safe_decrypt(profile_row.get("phone_number")),
             "owner_address": profile_row.get("address") or "",

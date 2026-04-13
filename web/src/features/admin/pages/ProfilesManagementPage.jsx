@@ -28,11 +28,16 @@ const ProfilesManagementPage = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [vehiclePlateMap, setVehiclePlateMap] = useState({});
   const [licenseClassMap, setLicenseClassMap] = useState({});
+  const [searchCitizendId, setSearchCitizendId] = useState("");
 
   // Load profiles on mount
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  const filteredProfiles = profiles.filter((profile) =>
+    profile.citizen_id.toLowerCase().includes(searchCitizendId.toLowerCase())
+  );
 
   const loadProfiles = async () => {
     setLoading(true);
@@ -226,6 +231,22 @@ const ProfilesManagementPage = () => {
         </button>
       </div>
 
+      <div style={{ marginBottom: 16, background: "white", padding: 12, borderRadius: 8 }}>
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo CCCD..."
+          value={searchCitizendId}
+          onChange={(e) => setSearchCitizendId(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            fontSize: 14,
+          }}
+        />
+      </div>
+
       {loading ? (
         <div className="loading">Đang tải...</div>
       ) : (
@@ -244,7 +265,7 @@ const ProfilesManagementPage = () => {
               </tr>
             </thead>
             <tbody>
-              {profiles.map((profile) => (
+              {filteredProfiles.map((profile) => (
                 <tr key={profile.id}>
                   <td>{profile.full_name}</td>
                   <td>{profile.citizen_id}</td>

@@ -265,6 +265,7 @@ def build_app() -> FastAPI:
                 citizen_id = str((vehicle_row or {}).get("citizen_id") or "").strip()
                 profile_id = str((vehicle_row or {}).get("profile_id") or "").strip()
                 if citizen_id:
+                    normalized_citizen_id = safe_decrypt(citizen_id)
                     profile_response = (
                         supabase_client.table("profiles")
                         .select("citizen_id, full_name, phone_number, address")
@@ -274,6 +275,18 @@ def build_app() -> FastAPI:
                     )
                     profile_rows = getattr(profile_response, "data", None) or []
                     owner_row = profile_rows[0] if profile_rows else {}
+                    if not owner_row:
+                        # For encrypted citizen_id, compare after decrypting each row.
+                        scan_response = (
+                            supabase_client.table("profiles")
+                            .select("citizen_id, full_name, phone_number, address")
+                            .execute()
+                        )
+                        scan_rows = getattr(scan_response, "data", None) or []
+                        for candidate in scan_rows:
+                            if safe_decrypt(candidate.get("citizen_id")) == normalized_citizen_id:
+                                owner_row = candidate
+                                break
                 elif profile_id:
                     profile_response = (
                         supabase_client.table("profiles")
@@ -299,7 +312,7 @@ def build_app() -> FastAPI:
                         detected_at=row.get("detected_at"),
                         status=row.get("status"),
                         vehicle_type=row.get("vehicle_type") or (vehicle_row.get("vehicle_type") if vehicle_row else None),
-                        owner_citizen_id=owner_row.get("citizen_id") or citizen_id or None,
+                        owner_citizen_id=safe_decrypt(owner_row.get("citizen_id") or citizen_id) or None,
                         owner_full_name=safe_decrypt(owner_row.get("full_name")),
                         owner_phone_number=safe_decrypt(owner_row.get("phone_number")),
                         owner_address=owner_row.get("address"),

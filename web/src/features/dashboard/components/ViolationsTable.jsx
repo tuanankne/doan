@@ -127,20 +127,10 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
                   <button
                     type="button"
                     onClick={() => openOwnerModal(item)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      textAlign: "left",
-                      cursor: "pointer",
-                      color: "#1b4d3e",
-                    }}
+                    className="owner-link-btn"
                     title="Xem giấy đăng ký xe"
                   >
-                    <div style={{ fontWeight: 600 }}>{item.owner_full_name || "Chưa có"}</div>
-                    <div className="hint" style={{ fontSize: 12 }}>
-                      {item.owner_citizen_id || ""}
-                    </div>
+                    {item.owner_full_name || "Chưa có"}
                   </button>
                 </td>
                 <td>{formatViolationType(item.violation_type)}</td>
@@ -175,44 +165,62 @@ export default function ViolationsTable({ violations, loading, error, onRefresh 
       </div>
 
       {selectedOwner ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={closeOwnerModal}
-        >
-          <div
-            className="section-card"
-            style={{ width: "min(680px, 92vw)", maxHeight: "86vh", overflow: "auto" }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="section-head">
-              <h3>Thông tin giấy đăng ký xe</h3>
-              <button type="button" className="btn" onClick={closeOwnerModal}>
-                Đóng
+        <div className="modal-overlay" onClick={closeOwnerModal}>
+          <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Thông tin phương tiện</h2>
+              <button type="button" className="close-btn" onClick={closeOwnerModal}>
+                ✕
               </button>
             </div>
-            <div className="form-grid" style={{ marginTop: 8 }}>
-              <div><strong>Biển số:</strong> {selectedOwner.detected_license_plate || "-"}</div>
-              <div><strong>Loại xe:</strong> {selectedOwner.vehicle_type || "-"}</div>
-              <div><strong>Chủ xe:</strong> {selectedOwner.owner_full_name || "-"}</div>
-              <div><strong>CCCD:</strong> {selectedOwner.owner_citizen_id || "-"}</div>
-              <div><strong>SĐT:</strong> {selectedOwner.owner_phone_number || "-"}</div>
-              <div><strong>Địa chỉ:</strong> {selectedOwner.owner_address || "-"}</div>
-              <div><strong>Hãng xe:</strong> {selectedOwner.vehicle_brand || "-"}</div>
-              <div><strong>Màu xe:</strong> {selectedOwner.vehicle_color || "-"}</div>
-              <div><strong>Số khung:</strong> {selectedOwner.vehicle_frame_number || "-"}</div>
-              <div><strong>Số máy:</strong> {selectedOwner.vehicle_engine_number || "-"}</div>
-              <div><strong>Ngày đăng ký:</strong> {selectedOwner.vehicle_registration_date || "-"}</div>
-              <div><strong>Hạn đăng ký:</strong> {selectedOwner.vehicle_registration_expiry_date || "-"}</div>
-              <div><strong>Cơ quan cấp:</strong> {selectedOwner.vehicle_issuing_authority || "-"}</div>
-              <div><strong>Trạng thái ĐK:</strong> {selectedOwner.vehicle_registration_status || "-"}</div>
+            <div className="details-card">
+              <div className="vehicle-cert-card">
+                <div className="vehicle-cert-head">Thông tin phương tiện</div>
+                <div className="vehicle-cert-body">
+                  <div className="vehicle-cert-plate">{selectedOwner.detected_license_plate || "-"}</div>
+                  <div className="vehicle-cert-verified">Đã xác minh</div>
+
+                  <div className="vehicle-cert-grid">
+                    <div className="vehicle-col">
+                      <div className="vehicle-item">
+                        <span className="label">Số giấy đăng ký</span>
+                        <span className="value">{selectedOwner.owner_citizen_id || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Ngày đăng ký</span>
+                        <span className="value">{selectedOwner.vehicle_registration_date || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Loại phương tiện</span>
+                        <span className="value">{selectedOwner.vehicle_type || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Hãng xe</span>
+                        <span className="value">{selectedOwner.vehicle_brand || "-"}</span>
+                      </div>
+                    </div>
+
+                    <div className="vehicle-col">
+                      <div className="vehicle-item">
+                        <span className="label">Số khung</span>
+                        <span className="value">{selectedOwner.vehicle_frame_number || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Số máy</span>
+                        <span className="value">{selectedOwner.vehicle_engine_number || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Cơ quan cấp</span>
+                        <span className="value">{selectedOwner.vehicle_issuing_authority || "-"}</span>
+                      </div>
+                      <div className="vehicle-item">
+                        <span className="label">Chủ xe</span>
+                        <span className="value">{selectedOwner.owner_full_name || "-"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

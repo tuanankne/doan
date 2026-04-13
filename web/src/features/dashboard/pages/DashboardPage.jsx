@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { NavLink } from "react-router-dom";
 import ViolationsTable from "../components/ViolationsTable";
 import { supabase } from "../../../shared/lib/supabaseClient";
 
@@ -97,12 +96,14 @@ export default function DashboardPage() {
   }, [violations]);
 
   const stats = useMemo(() => {
-    const redLight = enrichedViolations.filter(
-      (item) => item.violation_type === "Vượt đèn đỏ" || item.violation_type === "Vuot den do"
-    ).length;
-    const wrongWay = enrichedViolations.filter(
-      (item) => item.violation_type === "Ngược chiều" || item.violation_type === "Nguoc chieu"
-    ).length;
+    const pendingCount = enrichedViolations.filter((item) => {
+      const status = (item?.status || "").toLowerCase();
+      return status.includes("pending") || status.includes("cho") || status.includes("wait");
+    }).length;
+    const doneCount = enrichedViolations.filter((item) => {
+      const status = (item?.status || "").toLowerCase();
+      return status.includes("done") || status.includes("hoan") || status.includes("xu ly");
+    }).length;
     const totalFine = enrichedViolations.reduce(
       (sum, item) => sum + Number(item.fine_amount_snapshot || 0),
       0
@@ -110,8 +111,8 @@ export default function DashboardPage() {
 
     return {
       total: enrichedViolations.length,
-      redLight,
-      wrongWay,
+      pendingCount,
+      doneCount,
       totalFine,
     };
   }, [enrichedViolations]);
@@ -126,30 +127,10 @@ export default function DashboardPage() {
       </header>
 
       <section className="stats-grid">
-        <StatCard title="Tổng vi phạm" value={stats.total} />
-        <StatCard title="Vượt đèn đỏ" value={stats.redLight} />
-        <StatCard title="Đi ngược chiều" value={stats.wrongWay} />
-        <StatCard title="Tổng tiền phạt ước tính" value={formatMoney(stats.totalFine)} />
-      </section>
-
-      <section className="section-card admin-shortcuts">
-        <div className="section-head">
-          <h3>Quản trị dữ liệu</h3>
-        </div>
-        <div className="shortcut-grid">
-          <NavLink to="/admin/profiles" className="shortcut-card">
-            <div className="shortcut-title">Quản lý dân cư</div>
-            <div className="shortcut-desc">Xem, thêm, sửa, xóa hồ sơ dân cư.</div>
-          </NavLink>
-          <NavLink to="/admin/vehicles" className="shortcut-card">
-            <div className="shortcut-title">Quản lý phương tiện</div>
-            <div className="shortcut-desc">Thêm và cập nhật thông tin xe theo CCCD.</div>
-          </NavLink>
-          <NavLink to="/admin/licenses" className="shortcut-card">
-            <div className="shortcut-title">Quản lý bằng lái</div>
-            <div className="shortcut-desc">Theo dõi bằng lái, hạng và điểm còn lại.</div>
-          </NavLink>
-        </div>
+        <StatCard title="Tổng số lỗi" value={stats.total} />
+        <StatCard title="Chờ xử lý" value={stats.pendingCount} />
+        <StatCard title="Đã xử lý" value={stats.doneCount} />
+        <StatCard title="Tổng tiền" value={formatMoney(stats.totalFine)} />
       </section>
 
       <ViolationsTable

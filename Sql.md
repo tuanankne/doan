@@ -3,14 +3,16 @@
 
 CREATE TABLE public.accounts (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  citizen_id character varying NOT NULL UNIQUE,
   password_hash character varying NOT NULL,
   status character varying DEFAULT 'active'::character varying,
   last_login timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  profile_id uuid NOT NULL UNIQUE,
+  before character varying,
+  after character varying,
   CONSTRAINT accounts_pkey PRIMARY KEY (id),
-  CONSTRAINT accounts_citizen_id_fkey FOREIGN KEY (citizen_id) REFERENCES public.profiles(citizen_id)
+  CONSTRAINT accounts_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.complaints (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -27,7 +29,6 @@ CREATE TABLE public.complaints (
 );
 CREATE TABLE public.driver_licenses (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  citizen_id character varying NOT NULL,
   license_number character varying NOT NULL UNIQUE,
   license_class character varying NOT NULL,
   issued_date date NOT NULL,
@@ -37,8 +38,9 @@ CREATE TABLE public.driver_licenses (
   status character varying DEFAULT 'Hoạt động'::character varying,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  profile_id uuid NOT NULL,
   CONSTRAINT driver_licenses_pkey PRIMARY KEY (id),
-  CONSTRAINT driver_licenses_citizen_id_fkey FOREIGN KEY (citizen_id) REFERENCES public.profiles(citizen_id)
+  CONSTRAINT driver_licenses_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -49,8 +51,7 @@ CREATE TABLE public.profiles (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   date_of_birth date,
-  CONSTRAINT profiles_pkey PRIMARY KEY (id),
-  -- No FK to auth.users: profile records are managed independently in this app
+  CONSTRAINT profiles_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.vehicles (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -59,15 +60,15 @@ CREATE TABLE public.vehicles (
   brand character varying,
   color character varying,
   registered_at timestamp with time zone DEFAULT now(),
-  citizen_id character varying NOT NULL,
   frame_number character varying,
   engine_number character varying,
   registration_date date,
   registration_expiry_date date,
   issuing_authority character varying,
   registration_status character varying DEFAULT 'Hoạt động'::character varying,
+  profile_id uuid NOT NULL,
   CONSTRAINT vehicles_pkey PRIMARY KEY (id),
-  CONSTRAINT vehicles_citizen_id_fkey FOREIGN KEY (citizen_id) REFERENCES public.profiles(citizen_id)
+  CONSTRAINT vehicles_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.violation_penalties (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),

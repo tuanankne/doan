@@ -362,6 +362,159 @@ tr:hover td {
   font-size: 0.88rem;
 }
 
+.owner-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: #1b4d3e;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(27, 77, 62, 0.45);
+  text-underline-offset: 3px;
+}
+
+.owner-link-btn:hover {
+  color: #0f3529;
+  text-decoration-color: rgba(15, 53, 41, 0.8);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-large {
+  max-width: 900px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  transition: color 0.3s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.details-card {
+  padding: 20px;
+}
+
+.vehicle-cert-card {
+  max-width: 760px;
+  margin: 0 auto;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid #f2b178;
+  box-shadow: 0 10px 24px rgba(245, 127, 23, 0.18);
+  background: #fff7f0;
+}
+
+.vehicle-cert-head {
+  padding: 14px 18px;
+  font-weight: 800;
+  font-size: 20px;
+  color: #3d2d23;
+  background: #f7f1ec;
+  border-bottom: 1px solid #f0d7c2;
+}
+
+.vehicle-cert-body {
+  padding: 18px;
+  color: #fff;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 34%, rgba(255, 255, 255, 0) 34%, rgba(255, 255, 255, 0) 56%, rgba(255, 255, 255, 0.08) 56%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(125deg, #c91f18 0%, #e14b1a 44%, #f2941e 100%);
+}
+
+.vehicle-cert-plate {
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+
+.vehicle-cert-verified {
+  display: inline-block;
+  background: #f8d566;
+  color: #5e2b00;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 5px 10px;
+  margin-bottom: 14px;
+}
+
+.vehicle-cert-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.vehicle-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vehicle-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vehicle-item .label {
+  font-size: 14px;
+  opacity: 0.88;
+  font-weight: 500;
+}
+
+.vehicle-item .value {
+  font-size: 28px;
+  line-height: 1.08;
+  font-weight: 800;
+  word-break: break-word;
+}
+
 .video-tools {
   display: grid;
   gap: 12px;
@@ -538,5 +691,22 @@ textarea {
 
   .page-shell {
     margin-top: 16px;
+  }
+
+  .modal {
+    width: 95%;
+  }
+
+  .vehicle-cert-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .vehicle-cert-plate {
+    font-size: 28px;
+  }
+
+  .vehicle-item .value {
+    font-size: 22px;
   }
 }

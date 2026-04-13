@@ -27,6 +27,11 @@ const VehiclesManagementPage = () => {
     issuing_authority: "",
     registration_status: "Hoạt động",
   });
+  const [searchPlate, setSearchPlate] = useState("");
+
+  const filteredVehicles = vehicles.filter((vehicle) =>
+    vehicle.license_plate.toLowerCase().includes(searchPlate.toLowerCase())
+  );
 
   useEffect(() => {
     loadVehicles();
@@ -84,6 +89,9 @@ const VehiclesManagementPage = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    if (name === "citizen_id") {
+      setCitizenCheckStatus(null);
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -113,6 +121,13 @@ const VehiclesManagementPage = () => {
       if (editingId) {
         const updateData = {};
         const original = vehicles.find((v) => v.id === editingId);
+        if ((formData.citizen_id || "") !== (original?.citizen_id || "")) {
+          const citizenResponse = await checkCitizen(formData.citizen_id);
+          if (!citizenResponse.exists) {
+            alert("CCCD mới không tồn tại trong hồ sơ dân cư");
+            return;
+          }
+        }
         Object.keys(formData).forEach((key) => {
           if (formData[key] !== (original[key] || "")) {
             updateData[key] = formData[key];
@@ -152,6 +167,22 @@ const VehiclesManagementPage = () => {
         </button>
       </div>
 
+      <div style={{ marginBottom: 16, background: "white", padding: 12, borderRadius: 8 }}>
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo biển số..."
+          value={searchPlate}
+          onChange={(e) => setSearchPlate(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            fontSize: 14,
+          }}
+        />
+      </div>
+
       {loading ? (
         <div className="loading">Đang tải...</div>
       ) : (
@@ -171,7 +202,7 @@ const VehiclesManagementPage = () => {
               </tr>
             </thead>
             <tbody>
-              {vehicles.map((vehicle) => (
+              {filteredVehicles.map((vehicle) => (
                 <tr key={vehicle.id}>
                   <td>{vehicle.license_plate}</td>
                   <td>{vehicle.citizen_id}</td>
@@ -226,18 +257,15 @@ const VehiclesManagementPage = () => {
                     name="citizen_id"
                     value={formData.citizen_id}
                     onChange={handleInputChange}
-                    disabled={!!editingId}
                     required
                   />
-                  {!editingId && (
-                    <button
-                      type="button"
-                      onClick={handleCheckCitizen}
-                      className="btn-check"
-                    >
-                      Kiểm tra
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleCheckCitizen}
+                    className="btn-check"
+                  >
+                    Kiểm tra
+                  </button>
                 </div>
                 {citizenCheckStatus === "exists" && (
                   <div className="status-message success">✓ CCCD tồn tại</div>

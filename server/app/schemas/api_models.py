@@ -175,6 +175,7 @@ class VehicleCreateRequest(VehicleBase):
 
 
 class VehicleUpdateRequest(BaseModel):
+    citizen_id: Optional[str] = None
     license_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     brand: Optional[str] = None
