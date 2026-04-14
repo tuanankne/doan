@@ -12,6 +12,27 @@ class AppApi {
     defaultValue: _defaultBaseUrl,
   );
 
+  static Future<Map<String, dynamic>> get(String endpoint) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl$endpoint"),
+      headers: {"Content-Type": "application/json"},
+    );
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      data = {};
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = data["detail"]?.toString() ?? "Request failed";
+      throw Exception(message);
+    }
+
+    return data;
+  }
+
   static Future<Map<String, dynamic>> post(
     String endpoint,
     Map<String, dynamic> payload,

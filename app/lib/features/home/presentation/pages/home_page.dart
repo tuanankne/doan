@@ -1,7 +1,19 @@
 import "package:flutter/material.dart";
+import "package:app/features/auth/data/profile_api.dart";
+import "package:app/features/documents/presentation/pages/driver_license_page.dart";
+import "package:app/features/documents/presentation/pages/vehicle_registration_page.dart";
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String? profileId;
+  final String? citizenId;
+  final String? fullName;
+
+  const HomePage({
+    super.key,
+    this.profileId,
+    this.citizenId,
+    this.fullName,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -9,6 +21,24 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedTab = 0;
+  late Future<UserProfile?> _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _loadProfile();
+  }
+
+  Future<UserProfile?> _loadProfile() async {
+    if (widget.profileId != null) {
+      try {
+        return await ProfileApi.getProfile(widget.profileId!);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +223,7 @@ class _HomePageState extends State<HomePage> {
       itemBuilder: (context, index) {
         final item = items[index];
         return InkWell(
-          onTap: () {},
+          onTap: () => _handleFeatureTap(context, index),
           borderRadius: BorderRadius.circular(16),
           child: Ink(
             decoration: BoxDecoration(
@@ -236,6 +266,55 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+
+  void _handleFeatureTap(BuildContext context, int index) {
+    switch (index) {
+      case 1: // Giấy phép lái xe
+        if (widget.citizenId != null && widget.fullName != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DriverLicensePage(
+                citizenId: widget.citizenId!,
+                fullName: widget.fullName!,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Không thể tải thông tin người dùng")),
+          );
+        }
+        break;
+      case 2: // Đăng kí xe
+        if (widget.citizenId != null && widget.fullName != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => VehicleRegistrationPage(
+                citizenId: widget.citizenId!,
+                fullName: widget.fullName!,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Không thể tải thông tin người dùng")),
+          );
+        }
+        break;
+      case 0: // Danh sách vi phạm
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Tính năng sẽ sớm được phát hành")),
+        );
+        break;
+      case 3: // Hỗ trợ
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Tính năng sẽ sớm được phát hành")),
+        );
+        break;
+    }
   }
 }
 

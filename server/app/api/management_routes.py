@@ -706,4 +706,79 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
 
+    # ============== Mobile Documents Endpoints ==============
+    @router.post("/documents/driver-licenses", response_model=DriverLicenseListResponse)
+    async def get_driver_licenses_by_citizen(request: CitizenCheckRequest) -> DriverLicenseListResponse:
+        """Get driver licenses for a citizen by citizen_id."""
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if not profile:
+                return DriverLicenseListResponse(items=[])
+
+            response = (
+                supabase_client.table("driver_licenses")
+                .select("*")
+                .eq("profile_id", profile["id"])
+                .execute()
+            )
+            licenses = []
+
+            for row in response.data:
+                license_obj = DriverLicenseResponse(
+                    id=row["id"],
+                    citizen_id=request.citizen_id,
+                    license_number=decrypt_field(row["license_number"]) if row.get("license_number") else "",
+                    license_class=row.get("license_class", ""),
+                    issued_date=row.get("issued_date"),
+                    expiry_date=row.get("expiry_date"),
+                    issuing_authority=row.get("issuing_authority"),
+                    points=row.get("points", 12),
+                    status=row.get("status", "Hoạt động"),
+                    created_at=row.get("created_at"),
+                    updated_at=row.get("updated_at"),
+                )
+                licenses.append(license_obj)
+
+            return DriverLicenseListResponse(items=licenses)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/documents/vehicles", response_model=VehicleListResponse)
+    async def get_vehicles_by_citizen(request: CitizenCheckRequest) -> VehicleListResponse:
+        """Get vehicles for a citizen by citizen_id."""
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if not profile:
+                return VehicleListResponse(items=[])
+
+            response = (
+                supabase_client.table("vehicles")
+                .select("*")
+                .eq("profile_id", profile["id"])
+                .execute()
+            )
+            vehicles = []
+
+            for row in response.data:
+                vehicle = VehicleResponse(
+                    id=row["id"],
+                    citizen_id=request.citizen_id,
+                    license_plate=row.get("license_plate", ""),
+                    vehicle_type=row.get("vehicle_type"),
+                    brand=row.get("brand"),
+                    color=row.get("color"),
+                    frame_number=row.get("frame_number"),
+                    engine_number=row.get("engine_number"),
+                    registration_date=row.get("registration_date"),
+                    registration_expiry_date=row.get("registration_expiry_date"),
+                    issuing_authority=row.get("issuing_authority"),
+                    registration_status=row.get("registration_status", "Hoạt động"),
+                    registered_at=row.get("registered_at"),
+                )
+                vehicles.append(vehicle)
+
+            return VehicleListResponse(items=vehicles)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
     return router
