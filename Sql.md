@@ -9,8 +9,7 @@ CREATE TABLE public.accounts (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   profile_id uuid NOT NULL UNIQUE,
-  before character varying,
-  after character varying,
+  reset_hash character varying,
   CONSTRAINT accounts_pkey PRIMARY KEY (id),
   CONSTRAINT accounts_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
 );

@@ -11,7 +11,14 @@ from fastapi import APIRouter, HTTPException
 from supabase import Client
 
 from app.core.encryption import encrypt_field, decrypt_field
+from app.core.passwords import hash_secret, verify_secret
 from app.schemas.api_models import (
+    AccountAdminResetPasswordRequest,
+    AccountAuthResponse,
+    AccountCheckResponse,
+    AccountForgotPasswordRequest,
+    AccountLoginRequest,
+    AccountRegisterRequest,
     ProfileCreateRequest,
     ProfileUpdateRequest,
     ProfileResponse,
@@ -85,6 +92,18 @@ def _get_profile_by_id(supabase_client: Client, profile_id: str):
     return items[0] if items else None
 
 
+def _get_account_by_profile_id(supabase_client: Client, profile_id: str):
+    response = (
+        supabase_client.table("accounts")
+        .select("id, profile_id, password_hash, reset_hash, status")
+        .eq("profile_id", profile_id)
+        .limit(1)
+        .execute()
+    )
+    items = getattr(response, "data", None) or []
+    return items[0] if items else None
+
+
 def create_management_router(supabase_client: Client) -> APIRouter:
     """Create management router with profile, vehicle, and driver license endpoints."""
     router = APIRouter(prefix="/management", tags=["Management"])
@@ -102,12 +121,188 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
 
+    @router.post("/check-account", response_model=AccountCheckResponse)
+    async def check_account(request: CitizenCheckRequest) -> AccountCheckResponse:
+        """Check if citizen has linked account in accounts table."""
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if not profile:
+                return AccountCheckResponse(exists=False, message="Citizen not found")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if account:
+                return AccountCheckResponse(exists=True, message="Account found")
+            return AccountCheckResponse(exists=False, message="Account not found")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/reset-password", response_model=AccountAuthResponse)
+    async def admin_reset_password(request: AccountAdminResetPasswordRequest) -> AccountAuthResponse:
+        """Admin reset password by citizen_id for account management page."""
+        if len(request.new_password.strip()) < 6:
+            raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
+
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="Không tìm thấy công dân")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if not account:
+                raise HTTPException(status_code=404, detail="Công dân chưa có tài khoản")
+
+            updated = (
+                supabase_client.table("accounts")
+                .update({"password_hash": hash_secret(request.new_password.strip())})
+                .eq("id", account["id"])
+                .execute()
+            )
+            if not getattr(updated, "data", None):
+                raise HTTPException(status_code=500, detail="Không thể cập nhật mật khẩu")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đặt lại mật khẩu thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/auth/register", response_model=AccountAuthResponse)
+    async def register_account(request: AccountRegisterRequest) -> AccountAuthResponse:
+        """Register account by citizen_id and map to profile_id."""
+        citizen_id = request.citizen_id.strip()
+        password = request.password.strip()
+        confirm_password = request.confirm_password.strip()
+        pin = request.pin.strip()
+
+        if not citizen_id:
+            raise HTTPException(status_code=400, detail="Citizen ID is required")
+        if password != confirm_password:
+            raise HTTPException(status_code=400, detail="Mật khẩu xác nhận không khớp")
+        if len(password) < 6:
+            raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 6 ký tự")
+        if len(pin) < 4:
+            raise HTTPException(status_code=400, detail="Mã PIN phải có ít nhất 4 ký tự")
+
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, citizen_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="Không tìm thấy công dân theo CCCD")
+
+            existing = _get_account_by_profile_id(supabase_client, profile["id"])
+            if existing:
+                raise HTTPException(status_code=400, detail="CCCD này đã liên kết tài khoản")
+
+            result = (
+                supabase_client.table("accounts")
+                .insert(
+                    {
+                        "profile_id": profile["id"],
+                        "password_hash": hash_secret(password),
+                        "reset_hash": hash_secret(pin),
+                        "status": "active",
+                    }
+                )
+                .execute()
+            )
+            if not getattr(result, "data", None):
+                raise HTTPException(status_code=500, detail="Không thể tạo tài khoản")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đăng ký tài khoản thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/auth/login", response_model=AccountAuthResponse)
+    async def login_account(request: AccountLoginRequest) -> AccountAuthResponse:
+        """Login by citizen_id and password."""
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, request.citizen_id)
+            if not profile:
+                raise HTTPException(status_code=401, detail="CCCD hoặc mật khẩu không đúng")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if not account:
+                raise HTTPException(status_code=401, detail="CCCD hoặc mật khẩu không đúng")
+            if (account.get("status") or "active") != "active":
+                raise HTTPException(status_code=403, detail="Tài khoản đang bị khóa")
+
+            if not verify_secret(request.password, str(account.get("password_hash") or "")):
+                raise HTTPException(status_code=401, detail="CCCD hoặc mật khẩu không đúng")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đăng nhập thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/auth/forgot-password", response_model=AccountAuthResponse)
+    async def forgot_password(request: AccountForgotPasswordRequest) -> AccountAuthResponse:
+        """Reset password by citizen_id and PIN."""
+        citizen_id = request.citizen_id.strip()
+        pin = request.pin.strip()
+        new_password = request.new_password.strip()
+
+        if len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
+        if len(pin) < 4:
+            raise HTTPException(status_code=400, detail="Mã PIN không hợp lệ")
+
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, citizen_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="Không tìm thấy công dân")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if not account:
+                raise HTTPException(status_code=404, detail="Công dân chưa có tài khoản")
+
+            if not verify_secret(pin, str(account.get("reset_hash") or "")):
+                raise HTTPException(status_code=401, detail="Mã PIN không đúng")
+
+            updated = (
+                supabase_client.table("accounts")
+                .update({"password_hash": hash_secret(new_password)})
+                .eq("id", account["id"])
+                .execute()
+            )
+            if not getattr(updated, "data", None):
+                raise HTTPException(status_code=500, detail="Không thể cập nhật mật khẩu")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đặt lại mật khẩu thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
     # ============== Profiles Endpoints ==============
     @router.get("/profiles", response_model=ProfileListResponse)
     async def list_profiles() -> ProfileListResponse:
         """List all profiles with decrypted sensitive fields."""
         try:
             response = supabase_client.table("profiles").select("*").execute()
+            accounts = supabase_client.table("accounts").select("profile_id").execute()
+            account_profile_ids = {
+                str(item.get("profile_id"))
+                for item in (getattr(accounts, "data", None) or [])
+                if item.get("profile_id")
+            }
             profiles = []
 
             for row in response.data:
@@ -122,6 +317,7 @@ def create_management_router(supabase_client: Client) -> APIRouter:
                     updated_at=row.get("updated_at"),
                     driver_licenses=[],
                     vehicles=[],
+                    has_account=str(row.get("id")) in account_profile_ids,
                 )
 
                 # Get driver licenses for this profile

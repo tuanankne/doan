@@ -119,3 +119,18 @@ export const deleteVehicle = async (vehicleId) => {
     method: "DELETE",
   });
 };
+
+// ============== Accounts ==============
+export const checkAccountByCitizen = async (citizenId) => {
+  return apiCall("/management/check-account", {
+    method: "POST",
+    body: JSON.stringify({ citizen_id: citizenId }),
+  });
+};
+
+export const resetAccountPassword = async (citizenId, newPassword) => {
+  return apiCall("/management/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ citizen_id: citizenId, new_password: newPassword }),
+  });
+};

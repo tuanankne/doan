@@ -115,6 +115,7 @@ class ProfileResponseWithRelations(ProfileResponse):
     """Profile with decrypted sensitive fields and related driver licenses/vehicles."""
     driver_licenses: List[str] = []  # List of license IDs or empty
     vehicles: List[str] = []  # List of vehicle IDs or empty
+    has_account: bool = False
 
 
 class ProfileListResponse(BaseModel):
@@ -204,3 +205,37 @@ class CitizenCheckRequest(BaseModel):
 class CitizenCheckResponse(BaseModel):
     exists: bool
     message: str
+
+
+class AccountRegisterRequest(BaseModel):
+    citizen_id: str
+    password: str
+    confirm_password: str
+    pin: str
+
+
+class AccountLoginRequest(BaseModel):
+    citizen_id: str
+    password: str
+
+
+class AccountForgotPasswordRequest(BaseModel):
+    citizen_id: str
+    pin: str
+    new_password: str
+
+
+class AccountAdminResetPasswordRequest(BaseModel):
+    citizen_id: str
+    new_password: str
+
+
+class AccountCheckResponse(BaseModel):
+    exists: bool
+    message: str
+
+
+class AccountAuthResponse(BaseModel):
+    success: bool
+    message: str
+    profile_id: Optional[str] = None

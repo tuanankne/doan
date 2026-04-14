@@ -6,6 +6,8 @@ import {
   deleteProfile,
   listDriverLicenses,
   listVehicles,
+  checkAccountByCitizen,
+  resetAccountPassword,
 } from "../../../shared/api/managementApi";
 import "../styles/ManagementPages.css";
 
@@ -29,6 +31,14 @@ const ProfilesManagementPage = () => {
   const [vehiclePlateMap, setVehiclePlateMap] = useState({});
   const [licenseClassMap, setLicenseClassMap] = useState({});
   const [searchCitizendId, setSearchCitizendId] = useState("");
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetForm, setResetForm] = useState({
+    citizen_id: "",
+    new_password: "",
+    confirm_new_password: "",
+  });
+  const [accountCheckStatus, setAccountCheckStatus] = useState(null);
+  const [accountCheckMessage, setAccountCheckMessage] = useState("");
 
   // Load profiles on mount
   useEffect(() => {
@@ -143,6 +153,75 @@ const ProfilesManagementPage = () => {
     }
   };
 
+  const openResetModal = (profile = null) => {
+    setResetForm({
+      citizen_id: profile?.citizen_id || "",
+      new_password: "",
+      confirm_new_password: "",
+    });
+    setAccountCheckStatus(null);
+    setAccountCheckMessage("");
+    setShowResetModal(true);
+  };
+
+  const closeResetModal = () => {
+    setShowResetModal(false);
+    setAccountCheckStatus(null);
+    setAccountCheckMessage("");
+  };
+
+  const handleCheckAccount = async () => {
+    if (!resetForm.citizen_id.trim()) {
+      alert("Vui lòng nhập CCCD");
+      return;
+    }
+
+    setAccountCheckStatus("checking");
+    setAccountCheckMessage("Đang kiểm tra tài khoản...");
+
+    try {
+      const response = await checkAccountByCitizen(resetForm.citizen_id.trim());
+      if (response.exists) {
+        setAccountCheckStatus("exists");
+      } else {
+        setAccountCheckStatus("not_found");
+      }
+      setAccountCheckMessage(response.message || "");
+    } catch (error) {
+      setAccountCheckStatus("not_found");
+      setAccountCheckMessage(error.message || "Không thể kiểm tra tài khoản");
+    }
+  };
+
+  const handleResetPasswordSubmit = async (event) => {
+    event.preventDefault();
+
+    if (accountCheckStatus !== "exists") {
+      alert("Vui lòng kiểm tra CCCD và đảm bảo tài khoản đã tồn tại trước khi reset.");
+      return;
+    }
+
+    const newPassword = resetForm.new_password.trim();
+    const confirmPassword = resetForm.confirm_new_password.trim();
+    if (newPassword.length < 6) {
+      alert("Mật khẩu mới phải có ít nhất 6 ký tự");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert("Xác nhận mật khẩu mới không khớp");
+      return;
+    }
+
+    try {
+      await resetAccountPassword(resetForm.citizen_id.trim(), newPassword);
+      alert("Đặt lại mật khẩu thành công");
+      closeResetModal();
+      await loadProfiles();
+    } catch (error) {
+      alert("Không thể đặt lại mật khẩu: " + error.message);
+    }
+  };
+
   const handleViewDetails = async (profile, type, targetId = null) => {
     setSelectedProfile(profile);
     setModalType(type);
@@ -226,9 +305,14 @@ const ProfilesManagementPage = () => {
     <div className="management-page">
       <div className="page-header">
         <h1>Quản Lí Thông Tin Dân Cư</h1>
-        <button onClick={handleAddClick} className="btn-primary">
-          + Thêm Dân Cư
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => openResetModal()} className="btn-secondary">
+            Reset mật khẩu
+          </button>
+          <button onClick={handleAddClick} className="btn-primary">
+            + Thêm Dân Cư
+          </button>
+        </div>
       </div>
 
       <div style={{ marginBottom: 16, background: "white", padding: 12, borderRadius: 8 }}>
@@ -259,6 +343,7 @@ const ProfilesManagementPage = () => {
                 <th>Số Điện Thoại</th>
                 <th>Địa Chỉ</th>
                 <th>Ngày Sinh</th>
+                <th>Tài Khoản</th>
                 <th>Bằng Lái Xe</th>
                 <th>Phương Tiện</th>
                 <th>Hành Động</th>
@@ -272,6 +357,11 @@ const ProfilesManagementPage = () => {
                   <td>{profile.phone_number}</td>
                   <td>{profile.address || "-"}</td>
                   <td>{profile.date_of_birth || "-"}</td>
+                  <td>
+                    <span className={profile.has_account ? "status-on" : "status-off"}>
+                      {profile.has_account ? "Đã liên kết" : "Chưa có"}
+                    </span>
+                  </td>
                   <td>{renderLicenseOrVehicleCell(profile, "license")}</td>
                   <td>{renderLicenseOrVehicleCell(profile, "vehicle")}</td>
                   <td className="action-buttons">
@@ -292,6 +382,81 @@ const ProfilesManagementPage = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showResetModal && (
+        <div className="modal-overlay" onClick={closeResetModal}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Reset mật khẩu tài khoản</h2>
+              <button className="close-btn" onClick={closeResetModal}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPasswordSubmit} className="form">
+              <div className="form-group">
+                <label>CCCD *</label>
+                <div className="citizen-check">
+                  <input
+                    type="text"
+                    value={resetForm.citizen_id}
+                    onChange={(event) => {
+                      setResetForm((prev) => ({ ...prev, citizen_id: event.target.value }));
+                      setAccountCheckStatus(null);
+                      setAccountCheckMessage("");
+                    }}
+                    placeholder="Nhập CCCD để kiểm tra tài khoản"
+                    required
+                  />
+                  <button type="button" className="btn-check" onClick={handleCheckAccount}>
+                    Kiểm tra
+                  </button>
+                </div>
+                {accountCheckMessage ? (
+                  <div
+                    className={`status-message ${accountCheckStatus === "exists" ? "success" : "error"}`}
+                  >
+                    {accountCheckMessage}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="form-group">
+                <label>Mật khẩu mới *</label>
+                <input
+                  type="password"
+                  value={resetForm.new_password}
+                  onChange={(event) =>
+                    setResetForm((prev) => ({ ...prev, new_password: event.target.value }))
+                  }
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Xác nhận mật khẩu mới *</label>
+                <input
+                  type="password"
+                  value={resetForm.confirm_new_password}
+                  onChange={(event) =>
+                    setResetForm((prev) => ({ ...prev, confirm_new_password: event.target.value }))
+                  }
+                  required
+                />
+              </div>
+
+              <div className="form-actions">
+                <button type="submit" className="btn-primary">
+                  Đặt lại mật khẩu
+                </button>
+                <button type="button" className="btn-secondary" onClick={closeResetModal}>
+                  Hủy
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

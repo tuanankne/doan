@@ -289,6 +289,26 @@
   color: #c62828;
 }
 
+.status-on,
+.status-off {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-on {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-off {
+  background-color: #fff3e0;
+  color: #ef6c00;
+}
+
 .form-actions {
   display: flex;
   gap: 10px;
