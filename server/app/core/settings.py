@@ -16,6 +16,11 @@ class AppSettings:
     violation_penalties_table: str
     model_path: str
     encryption_key: str
+    paypal_client_id: str
+    paypal_client_secret: str
+    paypal_base_url: str
+    paypal_return_url: str
+    paypal_cancel_url: str
 
 
 def _resolve_model_path(server_root: Path, raw_model_path: str) -> str:
@@ -60,6 +65,21 @@ def load_settings() -> AppSettings:
     if encryption_key == "default_unsafe_key_change_in_production":
         print("WARNING: Using default ENCRYPTION_KEY. Set ENCRYPTION_KEY in .env for production.")
 
+    paypal_client_id = os.getenv("PAYPAL_CLIENT_ID", "").strip()
+    paypal_client_secret = os.getenv("PAYPAL_CLIENT_SECRET", "").strip()
+    paypal_base_url = os.getenv(
+        "PAYPAL_BASE_URL",
+        "https://api-m.sandbox.paypal.com",
+    ).strip()
+    paypal_return_url = os.getenv(
+        "PAYPAL_RETURN_URL",
+        "https://example.com/api/v1/paypal/return",
+    ).strip()
+    paypal_cancel_url = os.getenv(
+        "PAYPAL_CANCEL_URL",
+        "https://example.com/api/v1/paypal/cancel",
+    ).strip()
+
     return AppSettings(
         supabase_url=supabase_url,
         supabase_key=supabase_key,
@@ -68,4 +88,9 @@ def load_settings() -> AppSettings:
         violation_penalties_table=violation_penalties_table,
         model_path=model_path,
         encryption_key=encryption_key,
+        paypal_client_id=paypal_client_id,
+        paypal_client_secret=paypal_client_secret,
+        paypal_base_url=paypal_base_url,
+        paypal_return_url=paypal_return_url,
+        paypal_cancel_url=paypal_cancel_url,
     )

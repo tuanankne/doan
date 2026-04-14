@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import Client, create_client
 
@@ -23,6 +23,7 @@ from app.schemas.api_models import (
     ProcessVideoResponse,
     ViolationListResponse,
     ViolationRecordResponse,
+    ViolationPaymentQrResponse,
     ViolationPenaltyCreateRequest,
     ViolationPenaltyListResponse,
     ViolationPenaltyResponse,
@@ -30,6 +31,7 @@ from app.schemas.api_models import (
     UploadImageResponse,
 )
 from app.services.supabase_service import SupabaseStorageService
+from app.services.paypal_service import PaypalService
 from app.services.video_processor import ProcessingConfig, VideoProcessor
 
 
@@ -59,6 +61,13 @@ def build_app() -> FastAPI:
         supabase_key=settings.supabase_key,
         bucket=settings.storage_bucket,
         client=supabase_client,
+    )
+    paypal_service = PaypalService(
+        client_id=settings.paypal_client_id,
+        client_secret=settings.paypal_client_secret,
+        base_url=settings.paypal_base_url,
+        return_url=settings.paypal_return_url,
+        cancel_url=settings.paypal_cancel_url,
     )
     storage_service.ensure_bucket_exists(public=True)
 
@@ -330,6 +339,101 @@ def build_app() -> FastAPI:
             return ViolationListResponse(items=items)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Không thể tải danh sách vi phạm: {exc}") from exc
+
+    @router.post("/violations/{violation_id}/paypal-qr", response_model=ViolationPaymentQrResponse)
+    async def create_violation_paypal_qr(violation_id: str) -> ViolationPaymentQrResponse:
+        try:
+            response = (
+                supabase_client.table(settings.violations_table)
+                .select("id, detected_license_plate, violation_type, fine_amount_snapshot, status")
+                .eq("id", violation_id)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(response, "data", None) or []
+            if not rows:
+                raise HTTPException(status_code=404, detail="Không tìm thấy vi phạm")
+
+            violation_row = rows[0]
+            status_text = str(violation_row.get("status") or "").strip().lower()
+            if status_text in {"done", "paid", "đã thanh toán", "da thanh toan", "completed"}:
+                raise HTTPException(status_code=400, detail="Vi phạm này đã thanh toán")
+
+            amount = int(violation_row.get("fine_amount_snapshot") or 0)
+            if amount <= 0:
+                raise HTTPException(status_code=400, detail="Mức phạt không hợp lệ")
+
+            plate = str(violation_row.get("detected_license_plate") or "vi phạm").strip()
+            violation_type = str(violation_row.get("violation_type") or "").strip()
+            order_info = f"Thanh toan phat nguoi {plate} - {violation_type}".strip(" -")
+
+            paypal_response = paypal_service.create_order(
+                amount_vnd=amount,
+                order_info=order_info,
+                violation_id=violation_id,
+            )
+
+            return ViolationPaymentQrResponse(
+                success=True,
+                message="Tạo QR PayPal thành công",
+                violation_id=violation_id,
+                order_id=paypal_response.get("order_id"),
+                amount=amount,
+                order_info=order_info,
+                pay_url=paypal_response.get("approve_url"),
+                qr_code_url=paypal_response.get("qr_code_url"),
+                deeplink=None,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không thể tạo QR PayPal: {exc}") from exc
+
+    @router.get("/paypal/return")
+    async def paypal_return_callback(request: Request) -> Dict[str, Any]:
+        """PayPal callback: capture order và cập nhật trạng thái vi phạm thành done."""
+        try:
+            order_id = str(request.query_params.get("token") or "").strip()
+            if not order_id:
+                return {"message": "ignored", "reason": "missing_order_id"}
+
+            capture_payload = paypal_service.capture_order(order_id)
+            status_text = str(capture_payload.get("status") or "").upper()
+            if status_text != "COMPLETED":
+                return {"message": "ignored", "reason": "payment_not_success"}
+
+            # Lấy violation_id từ cache order (reliable hơn custom_id từ PayPal)
+            violation_id = paypal_service.get_violation_id_for_order(order_id)
+            if not violation_id:
+                return {"message": "ignored", "reason": "order_expired_or_missing"}
+
+            update_data: Dict[str, Any] = {"status": "done"}
+
+            # Có thể chưa có cột payment_status, nên fallback an toàn.
+            try:
+                (
+                    supabase_client.table(settings.violations_table)
+                    .update({**update_data, "payment_status": "done"})
+                    .eq("id", violation_id)
+                    .execute()
+                )
+            except Exception:
+                (
+                    supabase_client.table(settings.violations_table)
+                    .update(update_data)
+                    .eq("id", violation_id)
+                    .execute()
+                )
+
+            logger.info(f"PayPal payment success: order={order_id}, violation={violation_id}")
+            return {"message": "ok", "violation_id": violation_id, "status": "done"}
+        except Exception as exc:
+            logger.exception("PayPal callback failed: %s", exc)
+            return {"message": "error", "detail": str(exc)}
+
+    @router.get("/paypal/cancel")
+    async def paypal_cancel_callback() -> Dict[str, Any]:
+        return {"message": "cancelled"}
 
     @router.get("/violation-penalties", response_model=ViolationPenaltyListResponse)
     async def list_violation_penalties() -> ViolationPenaltyListResponse:

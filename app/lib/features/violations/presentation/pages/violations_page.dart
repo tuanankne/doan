@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:app/features/violations/data/violations_api.dart';
 
@@ -189,29 +191,23 @@ class _ViolationsPageState extends State<ViolationsPage>
                     if (!isPaid) ...[
                       const SizedBox(height: 12),
                       _DetailCard(
-                        title: 'Thanh toán MoMo',
+                        title: 'Thanh toán PayPal',
                         children: [
                           const Text(
-                            'Quét QR MoMo để thanh toán khoản phạt này.',
+                            'Quét QR PayPal để thanh toán khoản phạt này.',
                             style: TextStyle(color: Color(0xFF666666), fontSize: 13),
                           ),
                           const SizedBox(height: 12),
                           SizedBox(
                             height: 48,
                             child: FilledButton.icon(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Phần QR MoMo sẽ nối tiếp theo backend payment sau.'),
-                                  ),
-                                );
-                              },
+                              onPressed: () => _showPaypalQrDialog(record),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFFD40013),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               icon: const Icon(Icons.qr_code_2),
-                              label: const Text('Thanh toán MoMo'),
+                              label: const Text('Thanh toán PayPal'),
                             ),
                           ),
                         ],
@@ -225,6 +221,28 @@ class _ViolationsPageState extends State<ViolationsPage>
         );
       },
     );
+  }
+
+  void _showPaypalQrDialog(ViolationRecord record) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return _PaypalQrDialog(
+          record: record,
+          onPaymentSuccess: () {
+            Navigator.of(dialogContext).pop();
+            _refreshViolations();
+          },
+        );
+      },
+    );
+  }
+
+  void _refreshViolations() {
+    setState(() {
+      _violationsFuture = ViolationsApi.getViolations();
+    });
   }
 
   Future<void> _refresh() async {
@@ -692,5 +710,351 @@ class _FullScreenImagePage extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _PaypalQrDialog extends StatefulWidget {
+  final ViolationRecord record;
+  final VoidCallback onPaymentSuccess;
+
+  const _PaypalQrDialog({
+    required this.record,
+    required this.onPaymentSuccess,
+  });
+
+  @override
+  State<_PaypalQrDialog> createState() => _PaypalQrDialogState();
+}
+
+class _PaypalQrDialogState extends State<_PaypalQrDialog> {
+  late int _remainingSeconds;
+  late Future<PaypalPaymentQrResponse> _paymentFuture;
+  Timer? _countdownTimer;
+  bool _paymentSuccess = false;
+  bool _checkingPayment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingSeconds = 600; // 10 phút
+    _paymentFuture = ViolationsApi.createPaypalPaymentQr(widget.record.id);
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() {
+        if (_remainingSeconds > 0) {
+          _remainingSeconds--;
+        } else {
+          timer.cancel();
+          _showExpiredMessage();
+        }
+      });
+    });
+  }
+
+  Future<void> _checkPaymentOnce() async {
+    if (_checkingPayment || _paymentSuccess) {
+      return;
+    }
+
+    setState(() {
+      _checkingPayment = true;
+    });
+
+    try {
+      final violations = await ViolationsApi.getViolations();
+      final updated = violations.firstWhere(
+        (v) => v.id == widget.record.id,
+        orElse: () => widget.record,
+      );
+
+      final state = (updated.paymentStatus ?? updated.status ?? '').toLowerCase();
+      final isDone = state.contains('done') ||
+          state.contains('paid') ||
+          state.contains('completed') ||
+          state.contains('đã thanh toán') ||
+          state.contains('da thanh toan');
+
+      if (isDone && mounted) {
+        _countdownTimer?.cancel();
+        setState(() {
+          _paymentSuccess = true;
+          _checkingPayment = false;
+        });
+
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) {
+          Navigator.of(context).pop();
+          widget.onPaymentSuccess();
+        }
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chưa ghi nhận thanh toán. Vui lòng thử lại sau khi hoàn tất trên PayPal.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không kiểm tra được trạng thái thanh toán. Vui lòng thử lại.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingPayment = false;
+        });
+      }
+    }
+  }
+
+  void _showExpiredMessage() {
+    if (mounted) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('QR hết hạn'),
+          content: const Text('Thời hạn của QR code đã hết (10 phút). Vui lòng quét lại.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '$minutes:${secs.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_paymentSuccess) {
+      return Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 64,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Thanh toán thành công!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Vi phạm ${widget.record.detectedLicensePlate} đã được thanh toán',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF666666),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.all(16),
+      child: FutureBuilder<PaypalPaymentQrResponse>(
+        future: _paymentFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+              height: 320,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Lỗi: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD40013),
+                    ),
+                    child: const Text('Đóng'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final payment = snapshot.data;
+          final qrUrl = (payment?.qrCodeUrl ?? payment?.payUrl ?? '').trim();
+
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'QR thanh toán PayPal',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.record.detectedLicensePlate,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_formatMoney(widget.record.fineAmountSnapshot)} • ${payment?.orderInfo ?? widget.record.violationType}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF666666), fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'QR hết hạn trong ${_formatTime(_remainingSeconds)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: _remainingSeconds < 60 ? Colors.red : const Color(0xFF999999),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (qrUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        qrUrl,
+                        width: 240,
+                        height: 240,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 240,
+                            height: 240,
+                            color: const Color(0xFFF1F1F1),
+                            alignment: Alignment.center,
+                            child: const Text('Không tải được QR'),
+                          );
+                        },
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 240,
+                      height: 240,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F1F1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Text('PayPal không trả về QR'),
+                    ),
+                  const SizedBox(height: 16),
+                  Text(
+                    payment?.message ?? 'Tạo QR thành công',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF666666), fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Quét QR để thanh toán, sau đó bấm "Tôi đã thanh toán" để cập nhật ngay.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF999999),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _checkingPayment ? null : _checkPaymentOnce,
+                      icon: _checkingPayment
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_outline),
+                      label: Text(_checkingPayment ? 'Đang kiểm tra...' : 'Tôi đã thanh toán'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD40013),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Đóng'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatMoney(int amount) {
+    return '${(amount / 1000).toStringAsFixed(0)} K';
   }
 }

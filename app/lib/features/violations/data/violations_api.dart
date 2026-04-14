@@ -83,6 +83,44 @@ class ViolationRecord {
   }
 }
 
+class PaypalPaymentQrResponse {
+  final bool success;
+  final String message;
+  final String violationId;
+  final String? orderId;
+  final int? amount;
+  final String? orderInfo;
+  final String? payUrl;
+  final String? qrCodeUrl;
+  final String? deeplink;
+
+  PaypalPaymentQrResponse({
+    required this.success,
+    required this.message,
+    required this.violationId,
+    required this.orderId,
+    required this.amount,
+    required this.orderInfo,
+    required this.payUrl,
+    required this.qrCodeUrl,
+    required this.deeplink,
+  });
+
+  factory PaypalPaymentQrResponse.fromJson(Map<String, dynamic> json) {
+    return PaypalPaymentQrResponse(
+      success: json['success'] as bool? ?? false,
+      message: json['message']?.toString() ?? '',
+      violationId: json['violation_id']?.toString() ?? '',
+      orderId: json['order_id']?.toString(),
+      amount: (json['amount'] as num?)?.toInt(),
+      orderInfo: json['order_info']?.toString(),
+      payUrl: json['pay_url']?.toString(),
+      qrCodeUrl: json['qr_code_url']?.toString(),
+      deeplink: json['deeplink']?.toString(),
+    );
+  }
+}
+
 class ViolationsApi {
   static Future<List<ViolationRecord>> getViolations() async {
     final response = await AppApi.get('/violations');
@@ -96,5 +134,10 @@ class ViolationsApi {
         .whereType<Map>()
         .map((item) => ViolationRecord.fromJson(Map<String, dynamic>.from(item)))
         .toList();
+  }
+
+  static Future<PaypalPaymentQrResponse> createPaypalPaymentQr(String violationId) async {
+    final response = await AppApi.post('/violations/$violationId/paypal-qr', {});
+    return PaypalPaymentQrResponse.fromJson(response);
   }
 }

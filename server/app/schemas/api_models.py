@@ -53,6 +53,18 @@ class ViolationListResponse(BaseModel):
     items: List[ViolationRecordResponse]
 
 
+class ViolationPaymentQrResponse(BaseModel):
+    success: bool = False
+    message: str
+    violation_id: str
+    order_id: Optional[str] = None
+    amount: Optional[int] = None
+    order_info: Optional[str] = None
+    pay_url: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    deeplink: Optional[str] = None
+
+
 class ViolationPenaltyBase(BaseModel):
     violation_code: str
     violation_name: str
