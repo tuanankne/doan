@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:app/features/auth/data/profile_api.dart";
 import "package:app/features/documents/presentation/pages/driver_license_page.dart";
 import "package:app/features/documents/presentation/pages/vehicle_registration_page.dart";
+import "package:app/features/violations/presentation/pages/violations_page.dart";
 
 class HomePage extends StatefulWidget {
   final String? profileId;
@@ -305,8 +306,14 @@ class _HomePageState extends State<HomePage> {
         }
         break;
       case 0: // Danh sách vi phạm
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Tính năng sẽ sớm được phát hành")),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ViolationsPage(
+              citizenId: widget.citizenId,
+              fullName: widget.fullName,
+            ),
+          ),
         );
         break;
       case 3: // Hỗ trợ

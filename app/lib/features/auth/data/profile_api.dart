@@ -31,7 +31,7 @@ class UserProfile {
 
 class ProfileApi {
   static Future<UserProfile> getProfile(String profileId) async {
-    final response = await AppApi.get('management/profiles/$profileId');
+    final response = await AppApi.get('/management/profiles/$profileId');
     
     if (response is Map<String, dynamic>) {
       return UserProfile.fromJson(response);
