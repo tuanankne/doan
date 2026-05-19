@@ -57,4 +57,29 @@ class AppApi {
 
     return data;
   }
+
+  static Future<Map<String, dynamic>> patch(
+    String endpoint,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await http.patch(
+      Uri.parse("$baseUrl$endpoint"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(payload),
+    );
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      data = {};
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = data["detail"]?.toString() ?? "Request failed";
+      throw Exception(message);
+    }
+
+    return data;
+  }
 }

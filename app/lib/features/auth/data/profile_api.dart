@@ -32,10 +32,16 @@ class UserProfile {
 class ProfileApi {
   static Future<UserProfile> getProfile(String profileId) async {
     final response = await AppApi.get('/management/profiles/$profileId');
-    
-    if (response is Map<String, dynamic>) {
-      return UserProfile.fromJson(response);
-    }
-    throw Exception('Failed to fetch profile');
+    return UserProfile.fromJson(response);
+  }
+
+  static Future<UserProfile> updatePhoneNumber({
+    required String profileId,
+    required String phoneNumber,
+  }) async {
+    final response = await AppApi.patch('/management/profiles/$profileId', {
+      'phone_number': phoneNumber,
+    });
+    return UserProfile.fromJson(response);
   }
 }

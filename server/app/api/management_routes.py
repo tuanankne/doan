@@ -15,6 +15,8 @@ from app.core.passwords import hash_secret, verify_secret
 from app.schemas.api_models import (
     AccountAdminResetPasswordRequest,
     AccountAuthResponse,
+    AccountChangePasswordRequest,
+    AccountChangePinRequest,
     AccountCheckResponse,
     AccountForgotPasswordRequest,
     AccountLoginRequest,
@@ -248,6 +250,95 @@ def create_management_router(supabase_client: Client) -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
 
+    @router.post("/auth/change-password", response_model=AccountAuthResponse)
+    async def change_password(request: AccountChangePasswordRequest) -> AccountAuthResponse:
+        """Change password for logged-in user."""
+        citizen_id = request.citizen_id.strip()
+        current_password = request.current_password.strip()
+        new_password = request.new_password.strip()
+        confirm_password = request.confirm_password.strip()
+
+        if new_password != confirm_password:
+            raise HTTPException(status_code=400, detail="Mật khẩu xác nhận không khớp")
+        if len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="Mật khẩu mới phải có ít nhất 6 ký tự")
+
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, citizen_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="Không tìm thấy công dân")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if not account:
+                raise HTTPException(status_code=404, detail="Công dân chưa có tài khoản")
+
+            if not verify_secret(current_password, str(account.get("password_hash") or "")):
+                raise HTTPException(status_code=401, detail="Mật khẩu hiện tại không đúng")
+
+            updated = (
+                supabase_client.table("accounts")
+                .update({"password_hash": hash_secret(new_password)})
+                .eq("id", account["id"])
+                .execute()
+            )
+            if not getattr(updated, "data", None):
+                raise HTTPException(status_code=500, detail="Không thể cập nhật mật khẩu")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đổi mật khẩu thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.post("/auth/change-pin", response_model=AccountAuthResponse)
+    async def change_pin(request: AccountChangePinRequest) -> AccountAuthResponse:
+        """Change passcode (PIN) for logged-in user."""
+        citizen_id = request.citizen_id.strip()
+        current_pin = request.current_pin.strip()
+        new_pin = request.new_pin.strip()
+        password = request.password.strip()
+
+        if len(new_pin) < 4:
+            raise HTTPException(status_code=400, detail="Passcode mới phải có ít nhất 4 ký tự")
+
+        try:
+            profile = _get_profile_by_citizen_id(supabase_client, citizen_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="Không tìm thấy công dân")
+
+            account = _get_account_by_profile_id(supabase_client, profile["id"])
+            if not account:
+                raise HTTPException(status_code=404, detail="Công dân chưa có tài khoản")
+
+            if not verify_secret(password, str(account.get("password_hash") or "")):
+                raise HTTPException(status_code=401, detail="Mật khẩu không đúng")
+
+            if not verify_secret(current_pin, str(account.get("reset_hash") or "")):
+                raise HTTPException(status_code=401, detail="Passcode hiện tại không đúng")
+
+            updated = (
+                supabase_client.table("accounts")
+                .update({"reset_hash": hash_secret(new_pin)})
+                .eq("id", account["id"])
+                .execute()
+            )
+            if not getattr(updated, "data", None):
+                raise HTTPException(status_code=500, detail="Không thể cập nhật passcode")
+
+            return AccountAuthResponse(
+                success=True,
+                message="Đổi passcode thành công",
+                profile_id=profile["id"],
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
     @router.post("/auth/forgot-password", response_model=AccountAuthResponse)
     async def forgot_password(request: AccountForgotPasswordRequest) -> AccountAuthResponse:
         """Reset password by citizen_id and PIN."""
@@ -376,6 +467,36 @@ def create_management_router(supabase_client: Client) -> APIRouter:
                 full_name=_safe_decrypt(row.get("full_name")),
                 citizen_id=_decode_citizen_id(row.get("citizen_id")),
                 phone_number=decrypt_field(row["phone_number"]),
+                address=row.get("address"),
+                date_of_birth=row.get("date_of_birth"),
+                created_at=row.get("created_at"),
+                updated_at=row.get("updated_at"),
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}") from e
+
+    @router.get("/profiles/{profile_id}", response_model=ProfileResponse)
+    async def get_profile(profile_id: str) -> ProfileResponse:
+        """Get a single profile by ID."""
+        try:
+            response = (
+                supabase_client.table("profiles")
+                .select("*")
+                .eq("id", profile_id)
+                .limit(1)
+                .execute()
+            )
+            if not response.data:
+                raise HTTPException(status_code=404, detail="Profile not found")
+
+            row = response.data[0]
+            return ProfileResponse(
+                id=row["id"],
+                full_name=_safe_decrypt(row.get("full_name")),
+                citizen_id=_decode_citizen_id(row.get("citizen_id")),
+                phone_number=decrypt_field(row["phone_number"]) if row.get("phone_number") else "",
                 address=row.get("address"),
                 date_of_birth=row.get("date_of_birth"),
                 created_at=row.get("created_at"),

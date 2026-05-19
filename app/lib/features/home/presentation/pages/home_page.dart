@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:app/features/auth/data/profile_api.dart";
 import "package:app/features/documents/presentation/pages/driver_license_page.dart";
 import "package:app/features/documents/presentation/pages/vehicle_registration_page.dart";
+import "package:app/features/settings/presentation/pages/settings_page.dart";
 import "package:app/features/violations/presentation/pages/violations_page.dart";
 
 class HomePage extends StatefulWidget {
@@ -46,23 +47,29 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                child: Column(
-                  children: [
-                    _buildQuickActions(),
-                    const SizedBox(height: 12),
-                    _buildFeatureGrid(),
-                  ],
-                ),
+        child: _selectedTab == 4
+            ? SettingsPage(
+                profileId: widget.profileId,
+                citizenId: widget.citizenId,
+                fullName: widget.fullName,
+              )
+            : Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                      child: Column(
+                        children: [
+                          _buildQuickActions(),
+                          const SizedBox(height: 12),
+                          _buildFeatureGrid(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(

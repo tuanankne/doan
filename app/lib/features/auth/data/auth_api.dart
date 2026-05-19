@@ -38,4 +38,32 @@ class AuthApi {
       "new_password": newPassword,
     });
   }
+
+  Future<Map<String, dynamic>> changePassword({
+    required String citizenId,
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) {
+    return AppApi.post("/management/auth/change-password", {
+      "citizen_id": citizenId,
+      "current_password": currentPassword,
+      "new_password": newPassword,
+      "confirm_password": confirmPassword,
+    });
+  }
+
+  Future<Map<String, dynamic>> changePin({
+    required String citizenId,
+    required String currentPin,
+    required String newPin,
+    required String password,
+  }) {
+    return AppApi.post("/management/auth/change-pin", {
+      "citizen_id": citizenId,
+      "current_pin": currentPin,
+      "new_pin": newPin,
+      "password": password,
+    });
+  }
 }

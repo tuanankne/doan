@@ -242,6 +242,20 @@ class AccountAdminResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class AccountChangePasswordRequest(BaseModel):
+    citizen_id: str
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
+class AccountChangePinRequest(BaseModel):
+    citizen_id: str
+    current_pin: str
+    new_pin: str
+    password: str
+
+
 class AccountCheckResponse(BaseModel):
     exists: bool
     message: str
