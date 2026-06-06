@@ -51,7 +51,6 @@ dist/
 coverage/
 
 # AI models and large binary files
-*.pt
 *.pth
 *.onnx
 *.engine
