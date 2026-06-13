@@ -55,7 +55,7 @@ class AuthScaffold extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "VNeTraffic",
+                    "KMS-Global",
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
